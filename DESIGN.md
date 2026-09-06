@@ -179,3 +179,22 @@ Initial tuning only — needs real playtesters, not just scripted bots.
     wider than its box and overlapped the "FINISH" label. Replaced the
     text marker with a small colored `ColorRect` instead of fighting
     text sizing.
+- Visual polish pass on the Godot build after feedback that it read as
+  a flat "80s arcade" look next to the reference footage. Pushed the
+  procedural rendering further rather than adding real art (still a
+  LATER item — no texture/sprite pipeline exists yet): an ocean
+  environment with wave lines beyond the road, sky with drifting
+  clouds, striped guardrails with posts along both edges, a
+  center-highlight band on the road surface for a less flat asphalt
+  look, glossy gradient shading + a specular highlight on car bodies,
+  coins redesigned as glowing spinning gems, and proper bordered
+  StyleBoxFlat panels behind the HUD badges/gauge/buttons instead of
+  plain text and flat rects. Being upfront about the ceiling here: this
+  gets meaningfully closer to a polished mobile-racer feel, but it's
+  still vector shapes, not the reference's actual 3D-rendered sprites -
+  matching that exactly needs real art assets, not more clever drawing
+  code. Caught one real bug while verifying headlessly again: several
+  `Color8()` calls were passed a single packed hex literal
+  (`Color8(0xffd93d)`) instead of separate r/g/b bytes, which is a
+  GDScript parse error, not a runtime one - Godot refused to load the
+  script at all until fixed.

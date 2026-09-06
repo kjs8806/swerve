@@ -62,10 +62,12 @@ var elapsed_t: float = 0.0
 var lane_change_lock_until: int = 0
 var combo_popup_timer: float = 0.0
 var vignette_tex: GradientTexture2D
+var cloud_seeds: Array = []
+var rock_seeds: Array = []
 
 # ---------- HUD refs ----------
-@onready var timer_label: Label = $HUD/Root/TimerLabel
-@onready var coin_label: Label = $HUD/Root/CoinLabel
+@onready var timer_label: Label = $HUD/Root/TimerPanel/TimerLabel
+@onready var coin_label: Label = $HUD/Root/CoinPanel/CoinLabel
 @onready var progress_track: Control = $HUD/Root/ProgressTrack
 @onready var progress_fill: ColorRect = $HUD/Root/ProgressTrack/ProgressFill
 @onready var player_marker: ColorRect = $HUD/Root/ProgressTrack/PlayerMarker
@@ -85,10 +87,23 @@ var vignette_tex: GradientTexture2D
 func _ready() -> void:
 	randomize()
 	_build_vignette_texture()
+	_build_scenery_seeds()
 	btn_left.pressed.connect(func(): try_swerve(-1))
 	btn_right.pressed.connect(func(): try_swerve(1))
 	overlay_button.pressed.connect(func(): reset_game())
 	set_process_unhandled_key_input(true)
+
+
+func _build_scenery_seeds() -> void:
+	for i in range(5):
+		cloud_seeds.append({
+			"x": randf(), "y": 0.15 + randf() * 0.55, "scale": 0.6 + randf() * 0.8,
+		})
+	for i in range(6):
+		rock_seeds.append({
+			"side": -1 if i % 2 == 0 else 1,
+			"x": 0.55 + randf() * 0.4, "scale": 0.5 + randf() * 0.9,
+		})
 
 
 func _build_vignette_texture() -> void:
@@ -504,30 +519,104 @@ func _draw_dashed_line(p1: Vector2, p2: Vector2, color: Color, width: float, das
 func _draw_road() -> void:
 	var w := get_w()
 	var h := get_h()
-	draw_rect(Rect2(0, 0, w, h), Color8(0x0b, 0x12, 0x20))
-
 	var hy := horizon_y()
-	_draw_vgrad(Rect2(0, 0, w, hy), Color8(0x1c, 0x2b, 0x4a), Color8(0x3a, 0x5a, 0x86))
-
 	var cx := center_x()
+
+	_draw_sky(w, hy)
+	_draw_scenery(w, h, hy, cx)
+
 	var top_half := half_width_at(0.0) * (1.0 + 1.0 / (LANES - 1))
 	var bot_half := half_width_at(1.0) * (1.0 + 1.0 / (LANES - 1))
+
+	_draw_guardrail(cx, hy, h, top_half, bot_half, -1.0)
+	_draw_guardrail(cx, hy, h, top_half, bot_half, 1.0)
+
+	# Road surface: dark base + a lighter center band for a subtle
+	# crowned-asphalt look instead of one flat fill.
 	var poly := PackedVector2Array([
-		Vector2(cx - top_half, hy),
-		Vector2(cx + top_half, hy),
-		Vector2(cx + bot_half, h),
-		Vector2(cx - bot_half, h),
+		Vector2(cx - top_half, hy), Vector2(cx + top_half, hy),
+		Vector2(cx + bot_half, h), Vector2(cx - bot_half, h),
 	])
-	draw_colored_polygon(poly, Color8(0x33, 0x39, 0x4a))
+	draw_colored_polygon(poly, Color8(0x2c, 0x30, 0x3d))
+	var inset := 0.72
+	var poly_hi := PackedVector2Array([
+		Vector2(cx - top_half * inset, hy), Vector2(cx + top_half * inset, hy),
+		Vector2(cx + bot_half * inset, h), Vector2(cx - bot_half * inset, h),
+	])
+	draw_colored_polygon(poly_hi, Color(0.28, 0.31, 0.4, 0.55))
 
 	for i in range(1, LANES):
 		var frac := lane_fraction(i - 0.5)
 		var x0: float = cx + frac * half_width_at(0.0)
 		var x1: float = cx + frac * half_width_at(1.0)
-		_draw_dashed_line(Vector2(x0, hy), Vector2(x1, h), Color(1, 1, 1, 0.55), 3.0, 14.0, 16.0, fmod(road_scroll, 30.0))
+		_draw_dashed_line(Vector2(x0, hy), Vector2(x1, h), Color(1, 1, 1, 0.6), 3.0, 14.0, 16.0, fmod(road_scroll, 30.0))
 
 	draw_line(Vector2(cx - top_half, hy), Vector2(cx - bot_half, h), Color8(0xff, 0xcc, 0x33), 3.0)
 	draw_line(Vector2(cx + top_half, hy), Vector2(cx + bot_half, h), Color8(0xff, 0xcc, 0x33), 3.0)
+
+
+func _draw_sky(w: float, hy: float) -> void:
+	_draw_vgrad(Rect2(0, 0, w, hy), Color8(0x5e, 0xc8, 0xea), Color8(0xbf, 0xe9, 0xf5))
+	for seed in cloud_seeds:
+		var drift: float = fmod(seed["x"] * w + elapsed_t * 6.0, w + 160.0) - 80.0
+		var cy: float = hy * seed["y"]
+		var s: float = seed["scale"]
+		_draw_cloud(Vector2(drift, cy), s)
+
+
+func _draw_cloud(pos: Vector2, s: float) -> void:
+	var col := Color(1, 1, 1, 0.9)
+	draw_circle(pos, 16.0 * s, col)
+	draw_circle(pos + Vector2(16.0 * s, 3.0 * s), 12.0 * s, col)
+	draw_circle(pos + Vector2(-15.0 * s, 4.0 * s), 11.0 * s, col)
+	draw_circle(pos + Vector2(4.0 * s, -6.0 * s), 10.0 * s, col)
+
+
+func _draw_scenery(w: float, h: float, hy: float, cx: float) -> void:
+	# Ocean band beyond the road on both sides, from the horizon down.
+	_draw_vgrad(Rect2(0, hy, w, h - hy), Color8(0x1f, 0xa8, 0xc9), Color8(0x0d, 0x6f, 0x8c))
+	for i in range(10):
+		var yy: float = hy + (h - hy) * (float(i) / 10.0)
+		var wobble: float = sin(elapsed_t * 1.5 + i) * 4.0
+		draw_line(Vector2(0, yy + wobble), Vector2(w, yy - wobble), Color(1, 1, 1, 0.10), 2.0)
+
+	for seed in rock_seeds:
+		var side: float = seed["side"]
+		var s: float = seed["scale"]
+		var rx: float = cx + side * w * seed["x"]
+		var ry: float = hy - 2.0
+		var pts := PackedVector2Array([
+			Vector2(rx - 22.0 * s, ry), Vector2(rx - 6.0 * s, ry - 30.0 * s),
+			Vector2(rx + 10.0 * s, ry - 14.0 * s), Vector2(rx + 24.0 * s, ry),
+		])
+		draw_colored_polygon(pts, Color8(0x6b, 0x53, 0x3c))
+
+
+func _draw_guardrail(cx: float, hy: float, h: float, top_half: float, bot_half: float, side: float) -> void:
+	var rail_w_top := 5.0
+	var rail_w_bot := 16.0
+	var inner_top: float = top_half * side
+	var inner_bot: float = bot_half * side
+	var outer_top: float = inner_top + side * rail_w_top
+	var outer_bot: float = inner_bot + side * rail_w_bot
+	var poly := PackedVector2Array([
+		Vector2(cx + inner_top, hy), Vector2(cx + outer_top, hy),
+		Vector2(cx + outer_bot, h), Vector2(cx + inner_bot, h),
+	])
+	draw_colored_polygon(poly, Color8(0xd8, 0xdf, 0xe6))
+
+	var steps := 10
+	for i in range(steps):
+		var p0: float = float(i) / steps
+		var p1: float = float(i + 1) / steps
+		if i % 2 != 0:
+			continue
+		var s0 := scale_at(p0)
+		var y0 := row_y(p0)
+		var hw0: float = half_width_at(p0) * side + side * lerp(rail_w_top, rail_w_bot, ease_p(p0)) * 0.5
+		var post_w: float = maxf(2.0, 4.0 * s0)
+		var post_h: float = maxf(4.0, 10.0 * s0)
+		draw_rect(Rect2(cx + hw0 - post_w * 0.5, y0 - post_h, post_w, post_h), Color8(0xc0, 0x2c, 0x46))
 
 
 func _ellipse_points(center: Vector2, rx: float, ry: float, segments: int = 16) -> PackedVector2Array:
@@ -552,9 +641,28 @@ func _draw_car(pos: Vector2, scale: float, color: Color) -> void:
 	var w: float = 46.0 * scale
 	var h: float = 74.0 * scale
 	draw_set_transform(pos, 0.0, Vector2.ONE)
-	draw_colored_polygon(_ellipse_points(Vector2(0, h * 0.42), w * 0.55, h * 0.14), Color(0, 0, 0, 0.35))
+
+	draw_colored_polygon(_ellipse_points(Vector2(0, h * 0.44), w * 0.58, h * 0.15), Color(0, 0, 0, 0.38))
+
+	# Base coat, then a darker lower half for body-side shading and a
+	# bright top-down specular streak, so the paint reads as glossy
+	# rather than a single flat fill.
 	_draw_round_rect(Rect2(-w / 2.0, -h / 2.0, w, h), color, w * 0.28)
-	_draw_round_rect(Rect2(-w / 2.0 + w * 0.14, -h / 2.0 + h * 0.18, w * 0.72, h * 0.32), Color(1, 1, 1, 0.85), w * 0.16)
+	var shade := color.darkened(0.35)
+	shade.a = 0.55
+	_draw_round_rect(Rect2(-w / 2.0, h * 0.05, w, h * 0.45), shade, w * 0.24)
+	var gloss_pts := PackedVector2Array([
+		Vector2(-w * 0.16, -h / 2.0 + h * 0.05), Vector2(w * 0.10, -h / 2.0 + h * 0.05),
+		Vector2(w * 0.04, h / 2.0 - h * 0.08), Vector2(-w * 0.10, h / 2.0 - h * 0.08),
+	])
+	draw_colored_polygon(gloss_pts, Color(1, 1, 1, 0.22))
+
+	_draw_round_rect(Rect2(-w / 2.0 + w * 0.14, -h / 2.0 + h * 0.18, w * 0.72, h * 0.32), Color(0.55, 0.75, 0.92, 0.9), w * 0.16)
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(-w / 2.0 + w * 0.16, -h / 2.0 + h * 0.19), Vector2(-w / 2.0 + w * 0.4, -h / 2.0 + h * 0.19),
+		Vector2(-w / 2.0 + w * 0.28, -h / 2.0 + h * 0.46), Vector2(-w / 2.0 + w * 0.16, -h / 2.0 + h * 0.46),
+	]), Color(1, 1, 1, 0.5))
+
 	draw_rect(Rect2(-w / 2.0 + w * 0.08, -h / 2.0 - 2.0, w * 0.18, 5.0 * scale), Color8(0xff, 0xe0, 0x66))
 	draw_rect(Rect2(w / 2.0 - w * 0.26, -h / 2.0 - 2.0, w * 0.18, 5.0 * scale), Color8(0xff, 0xe0, 0x66))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
@@ -563,11 +671,15 @@ func _draw_car(pos: Vector2, scale: float, color: Color) -> void:
 func _draw_coin(pos: Vector2, scale: float) -> void:
 	draw_set_transform(pos, 0.0, Vector2.ONE)
 	var r: float = 13.0 * scale
-	draw_circle(Vector2.ZERO, r, Color8(0xff, 0xd9, 0x3d))
-	draw_arc(Vector2.ZERO, r, 0, TAU, 24, Color8(0xb8, 0x86, 0x0b), 2.0)
-	var font := ThemeDB.fallback_font
-	var font_size: int = int(14 * scale)
-	draw_string(font, Vector2(-4.0 * scale, 5.0 * scale), "$", HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, Color8(0xb8, 0x86, 0x0b))
+	var spin: float = sin(elapsed_t * 3.0 + pos.x * 0.05)
+	var rx: float = r * (0.55 + 0.45 * abs(spin))
+
+	draw_circle(Vector2.ZERO, r * 1.6, Color(1.0, 0.9, 0.3, 0.18))
+	draw_circle(Vector2.ZERO, r * 1.15, Color(1.0, 0.9, 0.3, 0.22))
+
+	draw_colored_polygon(_ellipse_points(Vector2.ZERO, rx, r, 20), Color8(0xff, 0xd9, 0x3d))
+	draw_arc(Vector2.ZERO, rx, 0, TAU, 20, Color8(0xb8, 0x86, 0x0b), 2.0)
+	draw_colored_polygon(_ellipse_points(Vector2(-rx * 0.3, -r * 0.35), rx * 0.35, r * 0.28, 12), Color(1, 1, 1, 0.75))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
