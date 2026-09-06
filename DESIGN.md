@@ -48,8 +48,8 @@ not overcautious) rather than just lane-camping in a safe lane.
   time runs out. Difficulty (obstacle density/frequency, base speed)
   ramps up over the run.
 - Progress bar shows the full race at a glance: a START label, a car
-  icon marking the player's own position by distance traveled, a rival
-  marker at its pace, and a checkered FINISH icon at the end.
+  icon marking the player's own position by distance traveled, and a
+  checkered FINISH icon at the end.
 - A checkered finish-line tape renders in the 3D scene itself as the
   player closes in on the finish distance, and again as they cross it.
 - Turbo Mode is unmistakable when active: a persistent pulsing "TURBO!"

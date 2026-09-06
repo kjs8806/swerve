@@ -6,7 +6,6 @@
   const RACE_TIME = 60;          // seconds to reach the finish line
   const FINISH_DISTANCE = 13000; // arbitrary distance units
   const ROAD_LENGTH = 260;       // "distance" a car covers between horizon and player row
-  const RIVAL_PACE = FINISH_DISTANCE / 55; // rival finishes in ~55s at steady pace
 
   const BASE_SPEED_START = 150;
   const BASE_SPEED_RAMP = 3.2;   // added to base speed per second of race time
@@ -36,7 +35,6 @@
     timer: document.getElementById("timerBox"),
     coin: document.getElementById("coinBox"),
     progressFill: document.getElementById("progressFill"),
-    rivalMarker: document.getElementById("rivalMarker"),
     playerMarker: document.getElementById("playerMarker"),
     turboFill: document.getElementById("turboGaugeFill"),
     turboBanner: document.getElementById("turboBanner"),
@@ -200,13 +198,17 @@
     }
   });
 
-  function bindHold(elm, fn) {
-    const start = (ev) => { ev.preventDefault(); fn(); };
-    elm.addEventListener("pointerdown", start);
+  // Bind both pointerdown (low latency) and click (broad compatibility -
+  // some mobile browsers/webviews handle Pointer Events unreliably). If a
+  // single tap fires both, trySwerve's own lock (and resetGame's
+  // idempotence) makes the duplicate harmless.
+  function bindTap(elm, fn) {
+    elm.addEventListener("pointerdown", (ev) => { ev.preventDefault(); fn(); });
+    elm.addEventListener("click", (ev) => { ev.preventDefault(); fn(); });
   }
-  bindHold(el.btnLeft, () => trySwerve(-1));
-  bindHold(el.btnRight, () => trySwerve(1));
-  el.overlayButton.addEventListener("pointerdown", (ev) => { ev.preventDefault(); resetGame(); });
+  bindTap(el.btnLeft, () => trySwerve(-1));
+  bindTap(el.btnRight, () => trySwerve(1));
+  bindTap(el.overlayButton, () => resetGame());
 
   // ---------- Spawning ----------
   function spawnObstacleWave() {
@@ -614,9 +616,6 @@
     const pct = clamp((game.distance / FINISH_DISTANCE) * 100, 0, 100);
     el.progressFill.style.width = pct + "%";
     el.playerMarker.style.left = pct + "%";
-    const rivalDist = Math.min(FINISH_DISTANCE, RIVAL_PACE * game.time);
-    const rivalPct = clamp((rivalDist / FINISH_DISTANCE) * 100, 0, 100);
-    el.rivalMarker.style.left = rivalPct + "%";
 
     const gaugePct = (game.turboGauge / TURBO_GAUGE_MAX) * 100;
     el.turboFill.style.width = gaugePct + "%";
@@ -636,6 +635,7 @@
   }
 
   resize();
+  resetGame();
   render();
   requestAnimationFrame(frame);
 })();

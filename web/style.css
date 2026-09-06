@@ -103,18 +103,6 @@ canvas#game {
   transition: width 0.08s linear;
 }
 
-#rivalMarker {
-  position: absolute;
-  top: -4px;
-  width: 3px;
-  height: 18px;
-  background: #ff5d8f;
-  left: 0%;
-  border-radius: 2px;
-  box-shadow: 0 0 6px #ff5d8f;
-  transform: translateX(-50%);
-}
-
 #playerMarker {
   position: absolute;
   top: 50%;
