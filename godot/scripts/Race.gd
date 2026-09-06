@@ -45,6 +45,7 @@ const TRAFFIC_TEXTURES := [
 	preload("res://assets/vehicles/traffic-orange.png"),
 ]
 const TEX_COIN := preload("res://assets/collectibles/coin.png")
+const TEX_TURBO_SEGMENT := preload("res://assets/hud/turbo-segment.png")
 const HAZARD_TEXTURES := [
 	preload("res://assets/obstacles/pothole.png"),
 	preload("res://assets/obstacles/loose-tire.png"),
@@ -89,14 +90,13 @@ var rock_seeds: Array = []
 @onready var coin_label: Label = $HUD/Root/CoinPanel/CoinLabel
 @onready var combo_label: Label = $HUD/Root/ComboPanel/ComboLabel
 @onready var progress_track: Control = $HUD/Root/ProgressTrack
-@onready var progress_fill: ColorRect = $HUD/Root/ProgressTrack/ProgressFill
-@onready var player_marker: ColorRect = $HUD/Root/ProgressTrack/PlayerMarker
+@onready var player_marker: TextureRect = $HUD/Root/ProgressTrack/PlayerMarker
 @onready var turbo_gauge_track: Control = $HUD/Root/TurboGaugeTrack
-@onready var turbo_fill: ColorRect = $HUD/Root/TurboGaugeTrack/TurboFill
+@onready var turbo_segments: Control = $HUD/Root/TurboGaugeTrack/TurboSegments
 @onready var turbo_banner: Label = $HUD/Root/TurboBanner
 @onready var combo_popup: Label = $HUD/Root/ComboPopup
-@onready var btn_left: Button = $HUD/Root/BtnLeft
-@onready var btn_right: Button = $HUD/Root/BtnRight
+@onready var btn_left: TextureButton = $HUD/Root/BtnLeft
+@onready var btn_right: TextureButton = $HUD/Root/BtnRight
 @onready var overlay: Control = $HUD/Root/Overlay
 @onready var overlay_title: Label = $HUD/Root/Overlay/OverlayCard/OverlayTitle
 @onready var overlay_subtitle: Label = $HUD/Root/Overlay/OverlayCard/OverlaySubtitle
@@ -108,10 +108,28 @@ func _ready() -> void:
 	randomize()
 	_build_vignette_texture()
 	_build_scenery_seeds()
+	_build_turbo_segments()
 	btn_left.pressed.connect(func(): try_swerve(-1))
 	btn_right.pressed.connect(func(): try_swerve(1))
 	overlay_button.pressed.connect(func(): reset_game())
 	set_process_unhandled_key_input(true)
+
+
+func _build_turbo_segments() -> void:
+	for child in turbo_segments.get_children():
+		child.queue_free()
+	const SEGMENT_COUNT := 12
+	const SEGMENT_WIDTH := 19.0
+	const SEGMENT_GAP := 3.0
+	for i in range(SEGMENT_COUNT):
+		var segment := TextureRect.new()
+		segment.texture = TEX_TURBO_SEGMENT
+		segment.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		segment.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		segment.position = Vector2(i * (SEGMENT_WIDTH + SEGMENT_GAP), 0.0)
+		segment.size = Vector2(SEGMENT_WIDTH, turbo_segments.size.y)
+		segment.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		turbo_segments.add_child(segment)
 
 
 func _build_scenery_seeds() -> void:
@@ -444,16 +462,24 @@ func _update_hud() -> void:
 	var remaining: float = maxf(0.0, RACE_TIME - time)
 	timer_label.text = "%.1f" % remaining
 	timer_label.modulate = Color8(0xff, 0x4d, 0x4d) if remaining < 10.0 else Color8(0xff, 0xcc, 0x33)
-	coin_label.text = "COIN %d" % coins
-	combo_label.text = "%dx COMBO" % maxi(1, combo)
+	coin_label.text = "%d" % coins
+	combo_label.text = "%dx" % maxi(1, combo)
 
 	var pct: float = clampf(distance / FINISH_DISTANCE, 0.0, 1.0)
 	var track_w: float = progress_track.size.x
-	progress_fill.size.x = track_w * pct
-	player_marker.position.x = clampf(track_w * pct - player_marker.size.x * 0.5, 0.0, maxf(0.0, track_w - player_marker.size.x))
+	var marker_start := 3.0
+	var marker_end := track_w * 0.87 - player_marker.size.x
+	player_marker.position.x = lerpf(marker_start, marker_end, pct)
 
 	var gauge_pct: float = turbo_gauge / TURBO_GAUGE_MAX
-	turbo_fill.size.x = turbo_gauge_track.size.x * gauge_pct
+	var lit_count := ceili(gauge_pct * turbo_segments.get_child_count())
+	for i in range(turbo_segments.get_child_count()):
+		var segment := turbo_segments.get_child(i) as TextureRect
+		if i < lit_count:
+			var color_t := float(i) / float(maxi(1, turbo_segments.get_child_count() - 1))
+			segment.modulate = Color(1.0, lerpf(0.12, 0.95, color_t), 0.05, 1.0)
+		else:
+			segment.modulate = Color(0.12, 0.16, 0.22, 0.55)
 	turbo_banner.visible = is_turbo
 	if is_turbo:
 		var glow: float = 0.8 + 0.2 * sin(elapsed_t * 8.0)

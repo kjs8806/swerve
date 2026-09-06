@@ -1,58 +1,14 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scripts/Race.gd" id="1"]
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_badge"]
-bg_color = Color(0.02, 0.06, 0.14, 0.78)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-border_color = Color(1, 0.8, 0.2, 0.9)
-corner_radius_top_left = 10
-corner_radius_top_right = 10
-corner_radius_bottom_right = 10
-corner_radius_bottom_left = 10
-shadow_color = Color(0, 0, 0, 0.35)
-shadow_size = 3
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_gauge"]
-bg_color = Color(0.05, 0.05, 0.08, 0.6)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-border_color = Color(1, 0.6, 0.1, 0.9)
-corner_radius_top_left = 8
-corner_radius_top_right = 8
-corner_radius_bottom_right = 8
-corner_radius_bottom_left = 8
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn"]
-bg_color = Color(0.08, 0.1, 0.16, 0.55)
-border_width_left = 3
-border_width_top = 3
-border_width_right = 3
-border_width_bottom = 3
-border_color = Color(1, 1, 1, 0.55)
-corner_radius_top_left = 100
-corner_radius_top_right = 100
-corner_radius_bottom_right = 100
-corner_radius_bottom_left = 100
-shadow_color = Color(0, 0, 0, 0.4)
-shadow_size = 4
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_pressed"]
-bg_color = Color(1, 0.8, 0.2, 0.55)
-border_width_left = 3
-border_width_top = 3
-border_width_right = 3
-border_width_bottom = 3
-border_color = Color(1, 1, 1, 0.8)
-corner_radius_top_left = 100
-corner_radius_top_right = 100
-corner_radius_bottom_right = 100
-corner_radius_bottom_left = 100
+[ext_resource type="Texture2D" path="res://assets/hud/coin-frame.png" id="2_coin"]
+[ext_resource type="Texture2D" path="res://assets/hud/timer-frame.png" id="3_timer"]
+[ext_resource type="Texture2D" path="res://assets/hud/progress-track.png" id="4_track"]
+[ext_resource type="Texture2D" path="res://assets/hud/progress-car.png" id="5_car"]
+[ext_resource type="Texture2D" path="res://assets/hud/combo-word.png" id="6_combo"]
+[ext_resource type="Texture2D" path="res://assets/hud/turbo-frame.png" id="7_turbo"]
+[ext_resource type="Texture2D" path="res://assets/hud/steer-left.png" id="8_left"]
+[ext_resource type="Texture2D" path="res://assets/hud/steer-right.png" id="9_right"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1")
@@ -64,102 +20,108 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 
-[node name="TimerPanel" type="PanelContainer" parent="HUD/Root"]
+[node name="TimerPanel" type="TextureRect" parent="HUD/Root"]
 anchor_left = 0.5
 anchor_right = 0.5
-offset_left = -95.0
-offset_top = 10.0
-offset_right = 95.0
-offset_bottom = 54.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_badge")
+offset_left = -92.0
+offset_top = 4.0
+offset_right = 92.0
+offset_bottom = 76.0
+texture = ExtResource("3_timer")
+expand_mode = 1
+stretch_mode = 6
+mouse_filter = 2
 
 [node name="TimerLabel" type="Label" parent="HUD/Root/TimerPanel"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 22
-theme_override_colors/font_color = Color(1, 0.8, 0.2, 1)
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_font_sizes/font_size = 40
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 8
 text = "60.0"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="StartLabel" type="Label" parent="HUD/Root"]
-offset_left = 100.0
-offset_top = 18.0
-offset_right = 150.0
-offset_bottom = 36.0
-theme_override_font_sizes/font_size = 12
-theme_override_colors/font_color = Color(1, 1, 1, 0.85)
-theme_override_colors/font_outline_color = Color(0, 0, 0, 0.6)
-theme_override_constants/outline_size = 3
-text = "START"
-
 [node name="ProgressTrack" type="Control" parent="HUD/Root"]
-anchor_right = 1.0
-offset_left = 156.0
-offset_top = 20.0
-offset_right = -156.0
-offset_bottom = 34.0
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -180.0
+offset_top = 66.0
+offset_right = 180.0
+offset_bottom = 111.0
 mouse_filter = 2
 
-[node name="ProgressTrackBg" type="ColorRect" parent="HUD/Root/ProgressTrack"]
+[node name="ProgressTrackArt" type="TextureRect" parent="HUD/Root/ProgressTrack"]
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color(0.02, 0.06, 0.14, 0.55)
+texture = ExtResource("4_track")
+expand_mode = 1
+stretch_mode = 6
 mouse_filter = 2
 
-[node name="ProgressFill" type="ColorRect" parent="HUD/Root/ProgressTrack"]
-anchor_bottom = 1.0
-color = Color(0.35, 0.9, 0.63, 1)
+[node name="PlayerMarker" type="TextureRect" parent="HUD/Root/ProgressTrack"]
+offset_left = 4.0
+offset_top = 6.0
+offset_right = 40.0
+offset_bottom = 38.0
+texture = ExtResource("5_car")
+expand_mode = 1
+stretch_mode = 5
 mouse_filter = 2
 
-[node name="PlayerMarker" type="ColorRect" parent="HUD/Root/ProgressTrack"]
-offset_top = -5.0
-offset_right = 14.0
-offset_bottom = 19.0
-color = Color(1, 0.176, 0.333, 1)
+[node name="CoinPanel" type="TextureRect" parent="HUD/Root"]
+offset_left = 10.0
+offset_top = 6.0
+offset_right = 187.0
+offset_bottom = 66.0
+texture = ExtResource("2_coin")
+expand_mode = 1
+stretch_mode = 6
 mouse_filter = 2
-
-[node name="FinishLabel" type="Label" parent="HUD/Root"]
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -158.0
-offset_top = 14.0
-offset_right = -98.0
-offset_bottom = 36.0
-theme_override_font_sizes/font_size = 14
-theme_override_colors/font_outline_color = Color(0, 0, 0, 0.6)
-theme_override_constants/outline_size = 3
-text = "FINISH"
-horizontal_alignment = 2
-
-[node name="CoinPanel" type="PanelContainer" parent="HUD/Root"]
-offset_left = 12.0
-offset_top = 10.0
-offset_right = 132.0
-offset_bottom = 54.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_badge")
 
 [node name="CoinLabel" type="Label" parent="HUD/Root/CoinPanel"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 16
-theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
-text = "COIN 0"
+layout_mode = 1
+anchor_left = 0.33
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_font_sizes/font_size = 32
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 7
+text = "0"
 horizontal_alignment = 1
 vertical_alignment = 1
+offset_right = -8.0
 
-[node name="ComboPanel" type="PanelContainer" parent="HUD/Root"]
+[node name="ComboPanel" type="Control" parent="HUD/Root"]
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -170.0
-offset_top = 10.0
-offset_right = -12.0
-offset_bottom = 54.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_badge")
+offset_left = -238.0
+offset_top = 4.0
+offset_right = -8.0
+offset_bottom = 76.0
+mouse_filter = 2
+
+[node name="ComboArt" type="TextureRect" parent="HUD/Root/ComboPanel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 66.0
+texture = ExtResource("6_combo")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
 
 [node name="ComboLabel" type="Label" parent="HUD/Root/ComboPanel"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 18
-theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
-text = "1x COMBO"
+offset_right = 86.0
+offset_bottom = 72.0
+theme_override_font_sizes/font_size = 38
+theme_override_colors/font_color = Color(1, 0.77, 0, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 8
+text = "1x"
 horizontal_alignment = 1
 vertical_alignment = 1
 
@@ -192,75 +154,55 @@ text = "TURBO!"
 horizontal_alignment = 1
 visible = false
 
-[node name="TurboGaugeLabel" type="Label" parent="HUD/Root"]
-anchor_left = 0.5
-anchor_top = 1.0
-anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = -40.0
-offset_top = -60.0
-offset_right = 40.0
-offset_bottom = -44.0
-theme_override_font_sizes/font_size = 11
-theme_override_colors/font_outline_color = Color(0, 0, 0, 0.6)
-theme_override_constants/outline_size = 3
-text = "TURBO"
-horizontal_alignment = 1
-
 [node name="TurboGaugeTrack" type="Control" parent="HUD/Root"]
 anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = -160.0
-offset_top = -42.0
-offset_right = 160.0
-offset_bottom = -28.0
+offset_left = -210.0
+offset_top = -76.0
+offset_right = 210.0
+offset_bottom = -4.0
 mouse_filter = 2
 
-[node name="TurboGaugeBg" type="PanelContainer" parent="HUD/Root/TurboGaugeTrack"]
+[node name="TurboGaugeArt" type="TextureRect" parent="HUD/Root/TurboGaugeTrack"]
 anchor_right = 1.0
 anchor_bottom = 1.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_gauge")
+texture = ExtResource("7_turbo")
+expand_mode = 1
+stretch_mode = 6
 mouse_filter = 2
 
-[node name="TurboFill" type="ColorRect" parent="HUD/Root/TurboGaugeTrack"]
-anchor_bottom = 1.0
-offset_left = 3.0
-offset_top = 3.0
-offset_bottom = -3.0
-color = Color(1, 0.6, 0.1, 1)
+[node name="TurboSegments" type="Control" parent="HUD/Root/TurboGaugeTrack"]
+offset_left = 118.0
+offset_top = 20.0
+offset_right = 386.0
+offset_bottom = 55.0
 mouse_filter = 2
 
-[node name="BtnLeft" type="Button" parent="HUD/Root"]
+[node name="BtnLeft" type="TextureButton" parent="HUD/Root"]
 anchor_top = 1.0
 anchor_bottom = 1.0
-offset_left = 14.0
-offset_top = -204.0
-offset_right = 204.0
-offset_bottom = -14.0
-theme_override_styles/normal = SubResource("StyleBoxFlat_btn")
-theme_override_styles/hover = SubResource("StyleBoxFlat_btn")
-theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
-theme_override_styles/focus = SubResource("StyleBoxFlat_btn")
-theme_override_font_sizes/font_size = 68
-text = "◀"
+offset_left = 18.0
+offset_top = -138.0
+offset_right = 178.0
+offset_bottom = -38.0
+texture_normal = ExtResource("8_left")
+ignore_texture_size = true
+stretch_mode = 5
 
-[node name="BtnRight" type="Button" parent="HUD/Root"]
+[node name="BtnRight" type="TextureButton" parent="HUD/Root"]
 anchor_left = 1.0
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -204.0
-offset_top = -204.0
-offset_right = -14.0
-offset_bottom = -14.0
-theme_override_styles/normal = SubResource("StyleBoxFlat_btn")
-theme_override_styles/hover = SubResource("StyleBoxFlat_btn")
-theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
-theme_override_styles/focus = SubResource("StyleBoxFlat_btn")
-theme_override_font_sizes/font_size = 68
-text = "▶"
+offset_left = -178.0
+offset_top = -138.0
+offset_right = -18.0
+offset_bottom = -38.0
+texture_normal = ExtResource("9_right")
+ignore_texture_size = true
+stretch_mode = 5
 
 [node name="Overlay" type="Control" parent="HUD/Root"]
 anchor_right = 1.0
