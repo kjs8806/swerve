@@ -47,8 +47,15 @@ not overcautious) rather than just lane-camping in a safe lane.
 - 60-second countdown; a fixed finish distance must be covered before
   time runs out. Difficulty (obstacle density/frequency, base speed)
   ramps up over the run.
-- Rival marker on the progress bar (HUD-only, steady pace) for
-  competitive framing, matching the reference's rival indicator.
+- Progress bar shows the full race at a glance: a START label, a car
+  icon marking the player's own position by distance traveled, a rival
+  marker at its pace, and a checkered FINISH icon at the end.
+- A checkered finish-line tape renders in the 3D scene itself as the
+  player closes in on the finish distance, and again as they cross it.
+- Turbo Mode is unmistakable when active: a persistent pulsing "TURBO!"
+  banner, radiating speed-line streaks, a screen-edge vignette pulse,
+  and a flame trail behind the player's car — on top of the color
+  change and gauge fill it already had.
 - Win/lose screen with run stats, restart.
 
 **REJECTED for this MVP** (present in the reference footage but not in
@@ -75,15 +82,14 @@ is the next step once the loop is confirmed fun — see ROADMAP.
 
 ## Balance Notes (tunable constants live at the top of `game.js`)
 Validated via scripted playthroughs (not just eyeballing):
-- Skilled reactive play: finishes around ~48–54s (comfortable margin).
-- Never touching the controls: **loses** (doesn't reach the finish
-  line by 60s) — sitting still is not a viable strategy.
-- Deliberately steering into traffic: barely survives (~59–60s) — the
-  worst-case "still trying" player is right at the edge, not
-  comfortably safe.
-This gives a real skill curve: doing nothing fails, careless play is
-risky, good play has room to spare. Initial tuning only — needs real
-playtesters, not just scripted bots.
+- Skilled reactive play: finishes around ~49s (comfortable margin).
+- Never touching the controls: **loses**.
+- Deliberately steering into every obstacle: **loses**.
+Only genuinely competent dodging wins — doing nothing and doing badly
+both fail, which is a sharper skill curve than the first pass (see
+DECISION_LOG: an earlier reading of "bad play barely survives" turned
+out to be an artifact of the stuck-obstacle bug, not real balance).
+Initial tuning only — needs real playtesters, not just scripted bots.
 
 ## ROADMAP
 1. **Prototype (this)** — HTML5 Canvas core loop, validated by scripted
@@ -112,3 +118,20 @@ playtesters, not just scripted bots.
   harsher 0.22x/1.7s) after scripted playtests showed even
   deliberately-bad play won with 7+ seconds to spare — the timer needs
   to feel like a real constraint, not a formality.
+- Fixed a real bug (user-reported: obstacle cars appeared stuck at the
+  bottom of the screen after being passed): once an obstacle was
+  marked `resolved` (hit or safely passed), the update loop's
+  `if (o.resolved) continue` skipped its position update on every
+  later frame too, not just its collision/dodge logic — so it froze in
+  place forever and never crossed the removal threshold. Fixed by
+  always advancing position first, and only skipping the *logic* once
+  resolved. Also extended how far a passed car travels before removal
+  (off the bottom of the screen, not just past the player's row) and
+  folded the player into the same depth-sorted draw pass as traffic,
+  so a just-passed car correctly renders in front of the player as it
+  exits instead of being hidden behind it.
+  Side effect worth noting: re-running the balance scripts after this
+  fix changed the "deliberately bad play" outcome from a narrow win
+  (~59.6s) to a loss — the earlier number was measured while stuck
+  obstacles were quietly cluttering the road, which isn't the real
+  game. The corrected balance (above) is the one to trust.

@@ -23,7 +23,9 @@
 
   const DANGER_ZONE = [0.83, 0.97];
   const COLLIDE_AT = 0.97;
-  const PASS_AT = 1.08;
+  const PASS_AT = 1.08;   // logic cutoff: "has this obstacle been passed without hitting"
+  const REMOVE_AT = 1.6;  // render cutoff: far enough past the player to be fully off-screen
+  const FINISH_REVEAL_RANGE = ROAD_LENGTH * 2.5; // how early the finish tape scrolls into view
 
   const LANE_CHANGE_TIME = 0.14; // seconds to visually slide one lane over
 
@@ -34,9 +36,10 @@
     timer: document.getElementById("timerBox"),
     coin: document.getElementById("coinBox"),
     progressFill: document.getElementById("progressFill"),
-    progressLabel: document.getElementById("progressLabel"),
     rivalMarker: document.getElementById("rivalMarker"),
+    playerMarker: document.getElementById("playerMarker"),
     turboFill: document.getElementById("turboGaugeFill"),
+    turboBanner: document.getElementById("turboBanner"),
     combo: document.getElementById("comboPopup"),
     overlay: document.getElementById("overlay"),
     overlayTitle: document.getElementById("overlayTitle"),
@@ -63,7 +66,7 @@
   // ---------- Helpers ----------
   const lerp = (a, b, t) => a + (b - a) * t;
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-  const easeP = (p) => Math.pow(clamp(p, 0, 1.2), 1.35);
+  const easeP = (p) => Math.pow(clamp(p, 0, 2), 1.35);
 
   function horizonY() { return H * 0.14; }
   function playerRowY() { return H * 0.80; }
@@ -106,6 +109,8 @@
     penaltyT: 0,     // remaining time of collision penalty recovery
     boostT: 0,       // remaining time of near-miss boost
     hitFlash: 0,
+    winFlash: 0,
+    roadScroll: 0,
     obstacles: [],
     coinsList: [],
     obstacleTimer: 0,
@@ -130,6 +135,8 @@
     game.penaltyT = 0;
     game.boostT = 0;
     game.hitFlash = 0;
+    game.winFlash = 0;
+    game.roadScroll = 0;
     game.obstacles = [];
     game.coinsList = [];
     game.obstacleTimer = 0.6;
@@ -255,12 +262,15 @@
     const speed = currentSpeed();
     game.distance += speed * dt;
     const dp = (speed / ROAD_LENGTH) * dt;
+    game.roadScroll += speed * dt;
 
     // obstacles
     for (const o of game.obstacles) {
-      if (o.resolved) continue;
-      const prevP = o.p;
+      // Position always advances, even once resolved (hit or passed) -
+      // otherwise a resolved car freezes in place forever instead of
+      // continuing off-screen, and never becomes eligible for removal.
       o.p += dp;
+      if (o.resolved) continue;
 
       if (o.lane === game.playerLane && o.p >= DANGER_ZONE[0] && o.p < COLLIDE_AT) {
         o.wasNear = true;
@@ -287,7 +297,7 @@
         }
       }
     }
-    game.obstacles = game.obstacles.filter((o) => o.p < PASS_AT + 0.05);
+    game.obstacles = game.obstacles.filter((o) => o.p < REMOVE_AT);
 
     // coins
     for (const c of game.coinsList) {
@@ -306,7 +316,7 @@
         }
       }
     }
-    game.coinsList = game.coinsList.filter((c) => !c.collected && c.p < PASS_AT + 0.05);
+    game.coinsList = game.coinsList.filter((c) => !c.collected && c.p < REMOVE_AT);
 
     // spawning with difficulty ramp
     game.obstacleTimer -= dt;
@@ -323,10 +333,12 @@
     }
 
     if (game.hitFlash > 0) game.hitFlash = Math.max(0, game.hitFlash - dt);
+    if (game.winFlash > 0) game.winFlash = Math.max(0, game.winFlash - dt);
 
     // win/lose
     if (game.distance >= FINISH_DISTANCE) {
       game.state = STATE.WIN;
+      game.winFlash = 0.5;
       showEndScreen(true);
     } else if (game.time >= RACE_TIME) {
       game.state = STATE.LOSE;
@@ -374,9 +386,10 @@
     ctx.closePath();
     ctx.fill();
 
-    // lane dividers
+    // lane dividers (scrolling dash gives a sense of forward speed)
     ctx.strokeStyle = "rgba(255,255,255,0.55)";
     ctx.setLineDash([14, 16]);
+    ctx.lineDashOffset = -(game.roadScroll % 30);
     for (let i = 1; i < LANES; i++) {
       const frac = laneFraction(i - 0.5);
       ctx.lineWidth = lerp(1, 3, easeP(1));
@@ -386,6 +399,7 @@
       ctx.stroke();
     }
     ctx.setLineDash([]);
+    ctx.lineDashOffset = 0;
 
     // edges
     ctx.strokeStyle = "#ffcc33";
@@ -449,9 +463,92 @@
     ctx.restore();
   }
 
+  function drawFinishTape(p) {
+    const y = rowY(p);
+    const scale = scaleAt(p);
+    const hw = halfWidthAt(p) * (1 + 1 / (LANES - 1));
+    const bandH = 24 * scale;
+    const poleW = 6 * scale;
+    const poleH = bandH * 2.6;
+
+    ctx.save();
+    ctx.fillStyle = "#c02c46";
+    ctx.fillRect(centerX() - hw - poleW, y - poleH, poleW, poleH);
+    ctx.fillRect(centerX() + hw, y - poleH, poleW, poleH);
+
+    const cols = 16;
+    const cw = (hw * 2) / cols;
+    for (let i = 0; i < cols; i++) {
+      ctx.fillStyle = i % 2 === 0 ? "#111318" : "#f5f5f5";
+      ctx.fillRect(centerX() - hw + i * cw, y - bandH, cw, bandH);
+    }
+    ctx.strokeStyle = "rgba(0,0,0,0.5)";
+    ctx.lineWidth = 2 * scale;
+    ctx.strokeRect(centerX() - hw, y - bandH, hw * 2, bandH);
+
+    ctx.fillStyle = "#fff";
+    ctx.font = `800 ${14 * scale}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.strokeStyle = "rgba(0,0,0,0.6)";
+    ctx.lineWidth = 3 * scale;
+    ctx.strokeText("FINISH", centerX(), y - bandH / 2);
+    ctx.fillText("FINISH", centerX(), y - bandH / 2);
+    ctx.restore();
+  }
+
+  function drawSpeedLines(t) {
+    const cx = centerX(), cy = horizonY();
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,200,120,0.5)";
+    const count = 14;
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2 + t * 0.6;
+      const wobble = 0.85 + 0.15 * Math.sin(t * 4 + i);
+      const len = Math.max(W, H) * 0.75 * wobble;
+      const x1 = cx + Math.cos(angle) * 18;
+      const y1 = cy + Math.sin(angle) * 18 * 0.4;
+      const x2 = cx + Math.cos(angle) * len;
+      const y2 = cy + Math.sin(angle) * len * 0.4;
+      ctx.lineWidth = 2 + 2 * wobble;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawFlameTrail(x, y, scale, t) {
+    const flicker = 0.7 + 0.3 * Math.sin(t * 30);
+    ctx.save();
+    ctx.translate(x, y + 30 * scale);
+    ctx.globalAlpha = flicker;
+    const grad = ctx.createLinearGradient(0, 0, 0, 36 * scale);
+    grad.addColorStop(0, "#fff2c4");
+    grad.addColorStop(0.4, "#ff9a1a");
+    grad.addColorStop(1, "rgba(255,60,0,0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(-12 * scale, 0);
+    ctx.lineTo(12 * scale, 0);
+    ctx.lineTo(0, 36 * scale * flicker);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
   function render() {
     drawRoad();
+    const t = performance.now() / 1000;
 
+    if (game.isTurbo) drawSpeedLines(t);
+
+    // Everything on the road — coins, traffic, the finish tape, and the
+    // player — is drawn in a single depth-sorted pass so an obstacle the
+    // player has just passed (p > 1, "closer to camera" than the player)
+    // correctly renders in front of the player as it exits, instead of
+    // being stuck behind it near the bottom of the screen.
     const drawList = [];
     for (const c of game.coinsList) {
       if (c.p < -0.1) continue;
@@ -463,21 +560,47 @@
         draw: () => drawCar(laneX(o.lane, o.p), rowY(o.p), scaleAt(o.p), "#4d7cff"),
       });
     }
-    drawList.sort((a, b) => a.p - b.p);
-    for (const item of drawList) item.draw();
+    const remaining = FINISH_DISTANCE - game.distance;
+    if (remaining <= FINISH_REVEAL_RANGE && remaining > -FINISH_REVEAL_RANGE * 0.4) {
+      const finishP = 1 - remaining / FINISH_REVEAL_RANGE;
+      drawList.push({ p: finishP, draw: () => drawFinishTape(finishP) });
+    }
 
-    // player car
     const px = laneX(game.playerLaneVisual, 1);
     const py = playerRowY();
+    const pScale = scaleAt(1) * 1.05;
     const color = game.isTurbo ? "#ff7a1a" : game.penaltyT > 0 ? "#ff4d4d" : "#ff2d55";
-    drawCar(px, py, scaleAt(1) * 1.05, color);
+    drawList.push({
+      p: 1.001,
+      draw: () => {
+        if (game.isTurbo) drawFlameTrail(px, py, pScale, t);
+        drawCar(px, py, pScale, color);
+      },
+    });
+
+    drawList.sort((a, b) => a.p - b.p);
+    for (const item of drawList) item.draw();
 
     if (game.hitFlash > 0) {
       ctx.fillStyle = `rgba(255,0,0,${game.hitFlash * 0.35})`;
       ctx.fillRect(0, 0, W, H);
     }
+    if (game.winFlash > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${game.winFlash * 0.6})`;
+      ctx.fillRect(0, 0, W, H);
+    }
     if (game.isTurbo) {
-      ctx.fillStyle = "rgba(255,150,20,0.10)";
+      const pulse = 0.5 + 0.5 * Math.sin(t * 8);
+      ctx.fillStyle = `rgba(255,140,20,${0.08 + pulse * 0.05})`;
+      ctx.fillRect(0, 0, W, H);
+
+      const vignette = ctx.createRadialGradient(
+        centerX(), H * 0.6, Math.min(W, H) * 0.35,
+        centerX(), H * 0.6, Math.max(W, H) * 0.75
+      );
+      vignette.addColorStop(0, "rgba(255,120,0,0)");
+      vignette.addColorStop(1, `rgba(255,90,0,${0.35 + pulse * 0.25})`);
+      ctx.fillStyle = vignette;
       ctx.fillRect(0, 0, W, H);
     }
   }
@@ -490,14 +613,15 @@
 
     const pct = clamp((game.distance / FINISH_DISTANCE) * 100, 0, 100);
     el.progressFill.style.width = pct + "%";
+    el.playerMarker.style.left = pct + "%";
     const rivalDist = Math.min(FINISH_DISTANCE, RIVAL_PACE * game.time);
     const rivalPct = clamp((rivalDist / FINISH_DISTANCE) * 100, 0, 100);
     el.rivalMarker.style.left = rivalPct + "%";
-    el.progressLabel.textContent = `${Math.floor(game.distance)} / ${FINISH_DISTANCE} m`;
 
     const gaugePct = (game.turboGauge / TURBO_GAUGE_MAX) * 100;
     el.turboFill.style.width = gaugePct + "%";
     el.turboFill.classList.toggle("ready", game.turboGauge >= TURBO_GAUGE_MAX - 0.01 && !game.isTurbo);
+    el.turboBanner.classList.toggle("show", game.isTurbo);
   }
 
   // ---------- Main loop ----------
