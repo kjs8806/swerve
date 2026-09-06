@@ -65,10 +65,12 @@ anchor_bottom = 1.0
 mouse_filter = 2
 
 [node name="TimerPanel" type="PanelContainer" parent="HUD/Root"]
-offset_left = 12.0
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -95.0
 offset_top = 10.0
-offset_right = 92.0
-offset_bottom = 42.0
+offset_right = 95.0
+offset_bottom = 54.0
 theme_override_styles/panel = SubResource("StyleBoxFlat_badge")
 
 [node name="TimerLabel" type="Label" parent="HUD/Root/TimerPanel"]
@@ -130,12 +132,10 @@ text = "FINISH"
 horizontal_alignment = 2
 
 [node name="CoinPanel" type="PanelContainer" parent="HUD/Root"]
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -92.0
+offset_left = 12.0
 offset_top = 10.0
-offset_right = -12.0
-offset_bottom = 42.0
+offset_right = 132.0
+offset_bottom = 54.0
 theme_override_styles/panel = SubResource("StyleBoxFlat_badge")
 
 [node name="CoinLabel" type="Label" parent="HUD/Root/CoinPanel"]
@@ -143,6 +143,23 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
 text = "COIN 0"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ComboPanel" type="PanelContainer" parent="HUD/Root"]
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -170.0
+offset_top = 10.0
+offset_right = -12.0
+offset_bottom = 54.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_badge")
+
+[node name="ComboLabel" type="Label" parent="HUD/Root/ComboPanel"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
+text = "1x COMBO"
 horizontal_alignment = 1
 vertical_alignment = 1
 

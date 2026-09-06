@@ -11,12 +11,11 @@ headlessly:
 godot4 --path godot/
 ```
 
-`scripts/Race.gd` holds the entire game: constants, state, update loop,
-and rendering (a single `_draw()` pass mirroring the Canvas version's
-approach - road, traffic, coins, the finish tape, and turbo effects are
-all procedural shapes, not sprites). `scenes/Main.tscn` holds the HUD
-(Control nodes) and wires up the swerve/restart buttons.
+`scripts/Race.gd` holds the game state, update loop, five-lane perspective
+grid, spawning, collision logic, and rendering. `scenes/Main.tscn` holds
+the HUD and wires up the swerve/restart buttons. Approved production art
+is stored under `assets/` and is drawn on the existing depth-sorted road.
 
-Known placeholder: all visuals are flat-color procedural shapes, same
-as the web prototype - real art/sprites are a later step once the loop
-is confirmed fun in this engine too (it already was in the web build).
+Lane widths are intentionally asymmetric for playability and match the
+approved layout: `15% / 25% / 20% / 25% / 15%`. Traffic and hazards are
+always spawned on the corresponding mathematical lane centers.

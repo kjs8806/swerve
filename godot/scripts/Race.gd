@@ -7,6 +7,8 @@ extends Node2D
 
 # ---------- Config ----------
 const LANES := 5
+const LANE_EDGES := [-1.0, -0.70, -0.20, 0.20, 0.70, 1.0]
+const LANE_CENTERS := [-0.85, -0.45, 0.0, 0.45, 0.85]
 const RACE_TIME := 60.0
 const FINISH_DISTANCE := 13000.0
 const ROAD_LENGTH := 260.0
@@ -31,6 +33,23 @@ const REMOVE_AT := 1.6
 const FINISH_REVEAL_RANGE := ROAD_LENGTH * 2.5
 
 const LANE_CHANGE_TIME := 0.14
+
+const TEX_BACKGROUND := preload("res://assets/environment/ocean-sky.png")
+const TEX_GUARDRAILS := preload("res://assets/environment/guardrails.png")
+const TEX_PLAYER := preload("res://assets/vehicles/player-gray.png")
+const TRAFFIC_TEXTURES := [
+	preload("res://assets/vehicles/traffic-coral.png"),
+	preload("res://assets/vehicles/traffic-yellow.png"),
+	preload("res://assets/vehicles/traffic-blue.png"),
+	preload("res://assets/vehicles/traffic-green.png"),
+	preload("res://assets/vehicles/traffic-orange.png"),
+]
+const TEX_COIN := preload("res://assets/collectibles/coin.png")
+const HAZARD_TEXTURES := [
+	preload("res://assets/obstacles/pothole.png"),
+	preload("res://assets/obstacles/loose-tire.png"),
+	preload("res://assets/obstacles/traffic-cone.png"),
+]
 
 enum State { READY, PLAYING, WIN, LOSE }
 
@@ -68,6 +87,7 @@ var rock_seeds: Array = []
 # ---------- HUD refs ----------
 @onready var timer_label: Label = $HUD/Root/TimerPanel/TimerLabel
 @onready var coin_label: Label = $HUD/Root/CoinPanel/CoinLabel
+@onready var combo_label: Label = $HUD/Root/ComboPanel/ComboLabel
 @onready var progress_track: Control = $HUD/Root/ProgressTrack
 @onready var progress_fill: ColorRect = $HUD/Root/ProgressTrack/ProgressFill
 @onready var player_marker: ColorRect = $HUD/Root/ProgressTrack/PlayerMarker
@@ -140,12 +160,14 @@ func ease_p(p: float) -> float:
 	return pow(clampf(p, 0.0, 2.0), 1.35)
 
 func half_width_at(p: float) -> float:
-	var top_half := get_w() * 0.10
-	var bot_half := get_w() * 0.44
+	var top_half := get_w() * 0.095
+	var bot_half := get_w() * 0.50
 	return lerp(top_half, bot_half, ease_p(p))
 
 func lane_fraction(lane_index: float) -> float:
-	return (lane_index - (LANES - 1) / 2.0) / ((LANES - 1) / 2.0)
+	var lo := clampi(int(floor(lane_index)), 0, LANES - 1)
+	var hi := clampi(int(ceil(lane_index)), 0, LANES - 1)
+	return lerp(LANE_CENTERS[lo], LANE_CENTERS[hi], lane_index - floor(lane_index))
 
 func lane_x(lane_index: float, p: float) -> float:
 	return center_x() + lane_fraction(lane_index) * half_width_at(p)
@@ -268,9 +290,12 @@ func _spawn_obstacle_wave() -> void:
 		lanes[j] = tmp
 
 	for i in range(count):
+		var is_hazard := randf() < 0.32
 		obstacles.append({
 			"lane": lanes[i], "p": 0.0, "resolved": false,
 			"dodged": false, "was_near": false,
+			"kind": "hazard" if is_hazard else "traffic",
+			"variant": randi() % (HAZARD_TEXTURES.size() if is_hazard else TRAFFIC_TEXTURES.size()),
 		})
 
 
@@ -420,6 +445,7 @@ func _update_hud() -> void:
 	timer_label.text = "%.1f" % remaining
 	timer_label.modulate = Color8(0xff, 0x4d, 0x4d) if remaining < 10.0 else Color8(0xff, 0xcc, 0x33)
 	coin_label.text = "COIN %d" % coins
+	combo_label.text = "%dx COMBO" % maxi(1, combo)
 
 	var pct: float = clampf(distance / FINISH_DISTANCE, 0.0, 1.0)
 	var track_w: float = progress_track.size.x
@@ -450,7 +476,7 @@ func _draw() -> void:
 			continue
 		draw_items.append({"p": c["p"], "cb": func(): _draw_coin(Vector2(lane_x(c["lane"], c["p"]), row_y(c["p"])), scale_at(c["p"]))})
 	for o in obstacles:
-		draw_items.append({"p": o["p"], "cb": func(): _draw_car(Vector2(lane_x(o["lane"], o["p"]), row_y(o["p"])), scale_at(o["p"]), Color8(0x4d, 0x7c, 0xff))})
+		draw_items.append({"p": o["p"], "cb": func(): _draw_obstacle(o)})
 
 	var remaining: float = FINISH_DISTANCE - distance
 	if remaining <= FINISH_REVEAL_RANGE and remaining > -FINISH_REVEAL_RANGE * 0.4:
@@ -460,19 +486,12 @@ func _draw() -> void:
 	var px := lane_x(player_lane_visual, 1.0)
 	var py := player_row_y()
 	var p_scale := scale_at(1.0) * 1.05
-	var p_color: Color
-	if is_turbo:
-		p_color = Color8(0xff, 0x7a, 0x1a)
-	elif penalty_t > 0.0:
-		p_color = Color8(0xff, 0x4d, 0x4d)
-	else:
-		p_color = Color8(0xff, 0x2d, 0x55)
 	var turbo_now := is_turbo
 	var t_now := elapsed_t
 	draw_items.append({"p": 1.001, "cb": func():
 		if turbo_now:
 			_draw_flame_trail(Vector2(px, py), p_scale, t_now)
-		_draw_car(Vector2(px, py), p_scale, p_color)
+		_draw_sprite_centered(TEX_PLAYER, Vector2(px, py), p_scale)
 	})
 
 	draw_items.sort_custom(func(a, b): return a["p"] < b["p"])
@@ -522,14 +541,10 @@ func _draw_road() -> void:
 	var hy := horizon_y()
 	var cx := center_x()
 
-	_draw_sky(w, hy)
-	_draw_scenery(w, h, hy, cx)
+	draw_texture_rect(TEX_BACKGROUND, Rect2(0, 0, w, h), false)
 
-	var top_half := half_width_at(0.0) * (1.0 + 1.0 / (LANES - 1))
-	var bot_half := half_width_at(1.0) * (1.0 + 1.0 / (LANES - 1))
-
-	_draw_guardrail(cx, hy, h, top_half, bot_half, -1.0)
-	_draw_guardrail(cx, hy, h, top_half, bot_half, 1.0)
+	var top_half := half_width_at(0.0)
+	var bot_half := half_width_at(1.0)
 
 	# Road surface: dark base + a lighter center band for a subtle
 	# crowned-asphalt look instead of one flat fill.
@@ -546,13 +561,29 @@ func _draw_road() -> void:
 	draw_colored_polygon(poly_hi, Color(0.28, 0.31, 0.4, 0.55))
 
 	for i in range(1, LANES):
-		var frac := lane_fraction(i - 0.5)
+		var frac := LANE_EDGES[i]
 		var x0: float = cx + frac * half_width_at(0.0)
 		var x1: float = cx + frac * half_width_at(1.0)
-		_draw_dashed_line(Vector2(x0, hy), Vector2(x1, h), Color(1, 1, 1, 0.6), 3.0, 14.0, 16.0, fmod(road_scroll, 30.0))
+		_draw_dashed_line(Vector2(x0, hy), Vector2(x1, h), Color(1, 1, 1, 0.88), 4.0, 16.0, 15.0, fmod(road_scroll, 31.0))
 
-	draw_line(Vector2(cx - top_half, hy), Vector2(cx - bot_half, h), Color8(0xff, 0xcc, 0x33), 3.0)
-	draw_line(Vector2(cx + top_half, hy), Vector2(cx + bot_half, h), Color8(0xff, 0xcc, 0x33), 3.0)
+	draw_line(Vector2(cx - top_half, hy), Vector2(cx - bot_half, h), Color.WHITE, 4.0)
+	draw_line(Vector2(cx + top_half, hy), Vector2(cx + bot_half, h), Color.WHITE, 4.0)
+	draw_texture_rect(TEX_GUARDRAILS, Rect2(0, 0, w, h), false)
+
+
+func _draw_sprite_centered(texture: Texture2D, pos: Vector2, scale: float) -> void:
+	var size := texture.get_size() * scale
+	draw_texture_rect(texture, Rect2(pos - size * 0.5, size), false)
+
+
+func _draw_obstacle(obstacle: Dictionary) -> void:
+	var p: float = obstacle["p"]
+	var pos := Vector2(lane_x(obstacle["lane"], p), row_y(p))
+	var visual_scale := scale_at(p)
+	if obstacle["kind"] == "hazard":
+		_draw_sprite_centered(HAZARD_TEXTURES[obstacle["variant"]], pos, visual_scale)
+	else:
+		_draw_sprite_centered(TRAFFIC_TEXTURES[obstacle["variant"]], pos, visual_scale * 0.82)
 
 
 func _draw_sky(w: float, hy: float) -> void:
@@ -669,18 +700,10 @@ func _draw_car(pos: Vector2, scale: float, color: Color) -> void:
 
 
 func _draw_coin(pos: Vector2, scale: float) -> void:
-	draw_set_transform(pos, 0.0, Vector2.ONE)
-	var r: float = 13.0 * scale
-	var spin: float = sin(elapsed_t * 3.0 + pos.x * 0.05)
-	var rx: float = r * (0.55 + 0.45 * abs(spin))
-
-	draw_circle(Vector2.ZERO, r * 1.6, Color(1.0, 0.9, 0.3, 0.18))
-	draw_circle(Vector2.ZERO, r * 1.15, Color(1.0, 0.9, 0.3, 0.22))
-
-	draw_colored_polygon(_ellipse_points(Vector2.ZERO, rx, r, 20), Color8(0xff, 0xd9, 0x3d))
-	draw_arc(Vector2.ZERO, rx, 0, TAU, 20, Color8(0xb8, 0x86, 0x0b), 2.0)
-	draw_colored_polygon(_ellipse_points(Vector2(-rx * 0.3, -r * 0.35), rx * 0.35, r * 0.28, 12), Color(1, 1, 1, 0.75))
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	var spin := 0.68 + 0.32 * abs(sin(elapsed_t * 5.0 + pos.x * 0.03))
+	var size := TEX_COIN.get_size() * scale
+	size.x *= spin
+	draw_texture_rect(TEX_COIN, Rect2(pos - size * 0.5, size), false)
 
 
 func _draw_finish_tape(p: float) -> void:
