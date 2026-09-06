@@ -135,3 +135,11 @@ Initial tuning only — needs real playtesters, not just scripted bots.
   (~59.6s) to a loss — the earlier number was measured while stuck
   obstacles were quietly cluttering the road, which isn't the real
   game. The corrected balance (above) is the one to trust.
+- Removed the rival marker/pace entirely — not needed.
+- Briefly tried auto-starting the race on page load instead of
+  requiring a "TAP TO START" tap, then reverted at the user's request:
+  the manual start screen is back. Bound both `pointerdown` and
+  `click` on the start/restart button either way, since
+  `pointerdown`-only handling can be unreliable in some mobile
+  browsers/webviews — that hardening stays regardless of which start
+  flow is active.

@@ -635,7 +635,6 @@
   }
 
   resize();
-  resetGame();
   render();
   requestAnimationFrame(frame);
 })();
