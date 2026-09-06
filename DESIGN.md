@@ -92,14 +92,19 @@ out to be an artifact of the stuck-obstacle bug, not real balance).
 Initial tuning only — needs real playtesters, not just scripted bots.
 
 ## ROADMAP
-1. **Prototype (this)** — HTML5 Canvas core loop, validated by scripted
-   play (done).
-2. **Playtest** — get a few real people to play the web build, watch
-   for confusion points and whether the near-miss boost is discovered
-   without being told.
-3. **Godot rebuild** — port the validated loop into Godot (the intended
-   shipping engine) with real mobile touch input and portrait/landscape
-   handling confirmed on-device.
+1. **Prototype** — HTML5 Canvas core loop, validated by scripted play
+   (done).
+2. **Playtest** — real people played the web build and confirmed the
+   core loop is fun (done — this is the gate that greenlit step 3).
+3. **Godot rebuild (this)** — ported the validated loop into Godot (the
+   intended shipping engine) under `godot/`. Same constants, same
+   logic, verified headlessly (Xvfb + `--rendering-driver opengl3`) via
+   a scripted test harness exercising collision, near-miss boost, coin
+   → turbo, keyboard input, on-screen button input, and win → restart —
+   the same rigor as the web prototype's Playwright tests, not just
+   "it opened without errors." Still needs an actual device pass (real
+   touch input feel, portrait/landscape, performance on a normal
+   phone) — the engine swap doesn't validate those on its own.
 4. **Vertical slice** — real art pass, SFX, one polished course.
 5. **MVP** — minimum meta-game (currency from races, one car unlock) to
    test D1 return motivation.
@@ -143,3 +148,31 @@ Initial tuning only — needs real playtesters, not just scripted bots.
   `pointerdown`-only handling can be unreliable in some mobile
   browsers/webviews — that hardening stays regardless of which start
   flow is active.
+- Ported the validated loop into Godot (`godot/`) once real playtesters
+  confirmed the web build was fun. Kept the same architecture as the
+  web version on purpose: one script (`Race.gd`) owns state, update,
+  and rendering via a single `_draw()` pass, mirroring the Canvas
+  approach rather than switching to per-object Sprite2D nodes — lower
+  risk for a straight port, revisit when real art replaces the
+  procedural shapes. Caught and fixed three real bugs during headless
+  verification (Xvfb + `--rendering-driver opengl3`, no GPU/Vulkan
+  available in this sandbox), not just visual guesses:
+  - `Control.modulate` multiplies with a node's existing theme color
+    rather than replacing it, so recoloring the combo popup via
+    `modulate` turned "HIT!" (meant to be red) into a muddy olive
+    green, since it was multiplying with the scene's default green.
+    Fixed by using `add_theme_color_override("font_color", ...)`
+    instead, and reserving `modulate` for brightness/alpha pulsing only.
+  - The "TURBO!" banner was functionally showing but unreadable: white
+    text (well, orange) is invisible against a similarly-colored
+    background. Same failure mode as the earlier web turbo-visibility
+    fix, in a new engine — added a black outline (`font_outline_color`
+    + `outline_size`) the same way the finish-tape "FINISH" text needed
+    one once I noticed it disappeared against the tape's white squares
+    (`draw_string_outline` before `draw_string`, mirroring the
+    Canvas version's stroke-then-fill).
+  - Godot `Label`s don't clip overflowing text by default, so a
+    plain-text player-position marker on the progress bar rendered
+    wider than its box and overlapped the "FINISH" label. Replaced the
+    text marker with a small colored `ColorRect` instead of fighting
+    text sizing.
