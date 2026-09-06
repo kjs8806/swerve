@@ -1,0 +1,114 @@
+# Swerve — Design Notes
+
+## GAME_VISION
+Player fantasy: weaving through dense traffic at speed, the tension of a
+close call, the rush of a chained dodge. A 5-lane, top-down/perspective
+arcade racer built to replicate a specific reference game (see prompt
+video/screenshot): reach the finish line within a 60-second timer while
+dodging traffic, chaining near-misses for speed boosts, and banking coins
+to trigger an invincible turbo burst.
+
+Target player: casual mobile arcade racer fans (Traffic Racer / Racing
+Fever lineage). As a 1:1 replica this has no differentiation of its own —
+it exists to nail the *feel* of the reference before any original spin is
+layered on.
+
+## CORE_LOOP
+Swerve (avoid/graze traffic) → speed changes (penalty or boost) → bank
+coins → fill turbo gauge → turbo burst (fast + invincible) → repeat →
+cross finish line before the 60s clock runs out.
+
+- **10s**: react to the first few obstacles, learn lane-swerve input.
+- **1 min**: a full race — dodge, chain near-misses, trigger turbo, win
+  or lose against the clock.
+- Session length is intentionally ~1 race; this MVP has no meta-game yet
+  (see LATER below).
+
+## Fun Hypothesis
+We believe players will enjoy this because avoiding traffic at
+increasing speed under a hard timer is inherently tense, and the
+near-miss-boost mechanic rewards *skillful* dodging (staying close,
+not overcautious) rather than just lane-camping in a safe lane.
+
+## MVP Scope (what's built)
+**CORE** — implemented in `web/`:
+- 5-lane perspective road, player fixed near the bottom, traffic
+  scrolling toward the player.
+- Swerve left/right (on-screen buttons + arrow keys), one lane per
+  input, clamped to the 5 lanes.
+- Collision with an obstacle → hard speed penalty that recovers over
+  ~1.7s (tuned so repeated crashes can cost you the race).
+- Near-miss: swerving out of a lane while an obstacle is in the "danger
+  zone" right behind you grants a temporary speed boost and increments
+  a combo counter (resets on collision).
+- Coins on the road fill a turbo gauge; full gauge auto-triggers Turbo
+  Mode (~1.9x speed, invincible to collisions) that drains over ~4
+  seconds.
+- 60-second countdown; a fixed finish distance must be covered before
+  time runs out. Difficulty (obstacle density/frequency, base speed)
+  ramps up over the run.
+- Rival marker on the progress bar (HUD-only, steady pace) for
+  competitive framing, matching the reference's rival indicator.
+- Win/lose screen with run stats, restart.
+
+**REJECTED for this MVP** (present in the reference footage but not in
+the user's mechanic description — flagged rather than silently added):
+- Manual "Turbo x4" consumable item separate from the gauge-triggered
+  turbo.
+- A "Jump" mechanic/button.
+Both are cheap to add later once the core swerve/turbo loop is proven
+fun; adding them now would be scope creep beyond what was asked for.
+
+**LATER** (meta-game, not needed to test the core hypothesis):
+- Persistent currency/garage, car unlocks, cosmetics.
+- Multiple race courses/finish distances, career/level progression.
+- Real art (this build uses placeholder canvas-drawn shapes, not
+  sprites) and audio.
+- Analytics wiring, soft-launch gates.
+
+## Tech Decision
+Built first as an HTML5 Canvas + vanilla JS prototype
+(`web/index.html`, `web/style.css`, `web/game.js`) rather than Godot,
+specifically to validate the core loop cheaply and interactively before
+committing to the target engine. Godot (the intended shipping engine)
+is the next step once the loop is confirmed fun — see ROADMAP.
+
+## Balance Notes (tunable constants live at the top of `game.js`)
+Validated via scripted playthroughs (not just eyeballing):
+- Skilled reactive play: finishes around ~48–54s (comfortable margin).
+- Never touching the controls: **loses** (doesn't reach the finish
+  line by 60s) — sitting still is not a viable strategy.
+- Deliberately steering into traffic: barely survives (~59–60s) — the
+  worst-case "still trying" player is right at the edge, not
+  comfortably safe.
+This gives a real skill curve: doing nothing fails, careless play is
+risky, good play has room to spare. Initial tuning only — needs real
+playtesters, not just scripted bots.
+
+## ROADMAP
+1. **Prototype (this)** — HTML5 Canvas core loop, validated by scripted
+   play (done).
+2. **Playtest** — get a few real people to play the web build, watch
+   for confusion points and whether the near-miss boost is discovered
+   without being told.
+3. **Godot rebuild** — port the validated loop into Godot (the intended
+   shipping engine) with real mobile touch input and portrait/landscape
+   handling confirmed on-device.
+4. **Vertical slice** — real art pass, SFX, one polished course.
+5. **MVP** — minimum meta-game (currency from races, one car unlock) to
+   test D1 return motivation.
+6. **Soft launch gates** — tutorial completion, D1 retention, average
+   time-to-finish distribution.
+
+## DECISION_LOG
+- Chose HTML5 Canvas over Godot for the first prototype: this sandbox
+  has no Godot editor/runtime, and validating the actual gameplay feel
+  now outweighs building in the final engine before we know the loop
+  works. Godot remains the target for the real build.
+- Cut the manual turbo-item and jump mechanics from MVP scope: not
+  part of the user's mechanic description, and the core swerve/turbo
+  loop can be validated without them.
+- Retuned collision penalty (from a mild 0.45x/1.1s slowdown to a
+  harsher 0.22x/1.7s) after scripted playtests showed even
+  deliberately-bad play won with 7+ seconds to spare — the timer needs
+  to feel like a real constraint, not a formality.

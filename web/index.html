@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Swerve</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="stage">
+    <canvas id="game"></canvas>
+
+    <div id="hud">
+      <div id="hud-top">
+        <div class="hud-box" id="timerBox">60.0</div>
+        <div id="progressWrap">
+          <div id="progressTrack">
+            <div id="progressFill"></div>
+            <div id="rivalMarker" title="Rival"></div>
+          </div>
+          <div id="progressLabel">0 / 0 m</div>
+        </div>
+        <div class="hud-box" id="coinBox">🪙 0</div>
+      </div>
+
+      <div id="comboPopup"></div>
+
+      <div id="hud-bottom">
+        <div id="turboGaugeWrap">
+          <div id="turboGaugeLabel">TURBO</div>
+          <div id="turboGaugeTrack"><div id="turboGaugeFill"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <button id="btnLeft" class="swerveBtn" aria-label="Swerve left">◁</button>
+    <button id="btnRight" class="swerveBtn" aria-label="Swerve right">▷</button>
+
+    <div id="overlay">
+      <div id="overlayCard">
+        <h1 id="overlayTitle">SWERVE</h1>
+        <p id="overlaySubtitle">Dodge traffic, chain near-misses, fill the turbo gauge, and reach the finish line in 60 seconds.</p>
+        <button id="overlayButton">TAP TO START</button>
+        <div id="overlayStats"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
