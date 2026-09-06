@@ -16,6 +16,5 @@ grid, spawning, collision logic, and rendering. `scenes/Main.tscn` holds
 the HUD and wires up the swerve/restart buttons. Approved production art
 is stored under `assets/` and is drawn on the existing depth-sorted road.
 
-Lane widths are intentionally asymmetric for playability and match the
-approved layout: `15% / 25% / 20% / 25% / 15%`. Traffic and hazards are
-always spawned on the corresponding mathematical lane centers.
+All five lanes are equal width (20% each). Traffic and hazards are always
+spawned on the corresponding mathematical lane centers.
