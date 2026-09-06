@@ -31,7 +31,9 @@ near-miss-boost mechanic rewards *skillful* dodging (staying close,
 not overcautious) rather than just lane-camping in a safe lane.
 
 ## MVP Scope (what's built)
-**CORE** — implemented in `web/`:
+**CORE** — implemented in `godot/` (originally validated as an HTML5
+Canvas prototype, since removed once the Godot port was verified — see
+DECISION_LOG):
 - 5-lane perspective road, player fixed near the bottom, traffic
   scrolling toward the player.
 - Swerve left/right (on-screen buttons + arrow keys), one lane per
@@ -69,16 +71,17 @@ fun; adding them now would be scope creep beyond what was asked for.
 **LATER** (meta-game, not needed to test the core hypothesis):
 - Persistent currency/garage, car unlocks, cosmetics.
 - Multiple race courses/finish distances, career/level progression.
-- Real art (this build uses placeholder canvas-drawn shapes, not
+- Real art (this build uses placeholder procedurally-drawn shapes, not
   sprites) and audio.
 - Analytics wiring, soft-launch gates.
 
 ## Tech Decision
-Built first as an HTML5 Canvas + vanilla JS prototype
-(`web/index.html`, `web/style.css`, `web/game.js`) rather than Godot,
-specifically to validate the core loop cheaply and interactively before
-committing to the target engine. Godot (the intended shipping engine)
-is the next step once the loop is confirmed fun — see ROADMAP.
+Prototyped first as an HTML5 Canvas + vanilla JS build to validate the
+core loop cheaply and interactively before committing to the target
+engine. Real playtesters confirmed it was fun, so the loop was ported
+into Godot (`godot/`) — the intended shipping engine — and the web
+prototype was removed once that port was verified. See ROADMAP and
+DECISION_LOG.
 
 ## Balance Notes (tunable constants live at the top of `game.js`)
 Validated via scripted playthroughs (not just eyeballing):
