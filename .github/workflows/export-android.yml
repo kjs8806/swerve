@@ -1,0 +1,114 @@
+name: Export Android APK
+
+# Builds a debug-signed APK from godot/ so it can be installed directly
+# on a device for playtesting. This does NOT produce a Play Store
+# release build - that requires a real release keystore the project
+# owner controls, which this workflow deliberately does not fabricate.
+# See the "Release builds" note at the bottom of this file to wire one
+# up later.
+#
+# Manual run: use the "Run workflow" button on the Actions tab.
+# Automatic run: pushing a tag like "v1.0.0".
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+env:
+  GODOT_VERSION: 4.3-stable
+  # Directory name Godot's own export-template lookup expects locally -
+  # this is intentionally NOT the same string as GODOT_VERSION above
+  # (dot, not hyphen, before "stable").
+  GODOT_TEMPLATE_DIR: 4.3.stable
+
+jobs:
+  export-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Android signing tools
+        # apksigner/zipalign/adb are enough to sign a non-Gradle Godot
+        # export; no full Android SDK/NDK download needed.
+        run: sudo apt-get update && sudo apt-get install -y apksigner zipalign adb
+
+      - name: Download Godot editor
+        run: |
+          curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          unzip -q godot.zip
+          chmod +x "Godot_v${GODOT_VERSION}_linux.x86_64"
+          sudo mv "Godot_v${GODOT_VERSION}_linux.x86_64" /usr/local/bin/godot
+
+      - name: Download and install Godot export templates
+        run: |
+          mkdir -p "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_DIR}"
+          curl -sSL -o templates.tpz "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz"
+          unzip -q templates.tpz -d /tmp/templates_extracted
+          mv /tmp/templates_extracted/templates/* "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_DIR}/"
+
+      - name: Generate a debug keystore
+        run: |
+          mkdir -p "$HOME/.android"
+          keytool -genkey -v -keystore "$HOME/.android/debug.keystore" -storepass android \
+            -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 \
+            -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Assemble a minimal Android SDK layout for signing
+        run: |
+          mkdir -p /tmp/android-sdk/platform-tools /tmp/android-sdk/build-tools/34.0.0
+          ln -s "$(command -v adb)" /tmp/android-sdk/platform-tools/adb
+          ln -s "$(command -v zipalign)" /tmp/android-sdk/build-tools/34.0.0/zipalign
+          ln -s "$(command -v apksigner)" /tmp/android-sdk/build-tools/34.0.0/apksigner
+
+      - name: Configure Godot editor settings
+        # Godot reads the Android SDK/Java SDK/debug keystore paths from
+        # editor settings, not from export_presets.cfg - there's no GUI
+        # here to click through, so this file is written directly.
+        run: |
+          mkdir -p "$HOME/.config/godot"
+          cat > "$HOME/.config/godot/editor_settings-4.tres" <<EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/java_sdk_path = "${JAVA_HOME}"
+          export/android/android_sdk_path = "/tmp/android-sdk"
+          export/android/debug_keystore = "$HOME/.android/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          EOF
+
+      - name: Export debug APK
+        working-directory: godot
+        run: |
+          mkdir -p builds/android
+          godot --headless --export-debug "Android" builds/android/swerve-debug.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: swerve-debug-apk
+          path: godot/builds/android/swerve-debug.apk
+          if-no-files-found: error
+
+# Release builds:
+# To produce a Play Store-signed release APK/AAB instead of (or
+# alongside) the debug build above, you would:
+#   1. Generate your own release keystore and keep it somewhere safe -
+#      losing it means you can never update a published app again.
+#   2. Add it to this repo's Actions secrets (base64-encoded), plus its
+#      alias and passwords, as separate secrets - never commit a
+#      keystore file itself.
+#   3. Add a step that decodes the secret to a file and points
+#      "export/android/keystore/release*" (in export_presets.cfg, this
+#      time - release credentials CAN live in the preset, unlike the
+#      debug ones above) at it, then run
+#      `godot --headless --export-release "Android" ...`.
+# Deliberately not done here since no release keystore exists yet.

@@ -198,3 +198,29 @@ Initial tuning only — needs real playtesters, not just scripted bots.
   (`Color8(0xffd93d)`) instead of separate r/g/b bytes, which is a
   GDScript parse error, not a runtime one - Godot refused to load the
   script at all until fixed.
+- Added a GitHub Actions workflow (`.github/workflows/export-android.yml`)
+  that builds a debug-signed APK on demand, so the game can be sideloaded
+  onto a real device (the target here: a Samsung tablet, played through
+  DeX) instead of only ever running in an editor or this sandbox. Debug
+  signing only, deliberately: a release keystore is a credential the
+  project owner has to generate and safeguard themselves, not something
+  to fabricate on their behalf, and nothing here needs Play Store
+  distribution yet anyway.
+  Before trusting the workflow, reproduced the exact same export locally
+  in this sandbox first (download the real export templates, assemble a
+  minimal Android SDK from Ubuntu's standalone `apksigner`/`zipalign`/`adb`
+  packages instead of Google's ~1GB cmdline-tools download, generate a
+  debug keystore, run the real `godot --export-debug`) and inspected the
+  resulting APK (`apksigner verify`, `unzip -l` to confirm the game's own
+  compiled scene/script actually landed inside it) rather than writing an
+  export preset and workflow YAML on faith. That caught a genuinely
+  non-obvious bug: Godot's Android export validity check silently sets
+  `valid = false` with **no error message** when the project doesn't have
+  `rendering/textures/vram_compression/import_etc2_astc` enabled — the
+  generic "Cannot export project ... due to configuration errors" message
+  printed with a completely blank error body, and tracing it required
+  reading Godot's own export-validation source
+  (`has_valid_project_configuration` in `platform/android/export/export_plugin.cpp`)
+  to find the silent branch. Fixed by adding that setting to
+  `project.godot`. This would have been a confusing, contextless CI
+  failure to debug blind from GitHub's log output alone.
