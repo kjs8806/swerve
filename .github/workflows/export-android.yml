@@ -12,6 +12,8 @@ name: Export Android APK
 on:
   workflow_dispatch:
   push:
+    branches:
+      - "claude/mobile-game-design-7pzuyq"
     tags:
       - "v*"
 
