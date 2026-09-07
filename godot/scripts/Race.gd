@@ -35,6 +35,15 @@ const FINISH_REVEAL_RANGE := ROAD_LENGTH * 2.5
 
 const LANE_CHANGE_TIME := 0.14
 
+# Impact/turbo feedback - kept brief and geometrically confined (see
+# _draw_speed_lines/_draw_turbo_ring) so they read clearly without ever
+# covering a lane or disabling input.
+const SHAKE_DURATION := 0.22
+const SHAKE_MAGNITUDE := 9.0
+const TURBO_RING_DURATION := 0.5
+const SPEED_LINE_COUNT := 10
+const SPEED_LINE_BAND := 0.42
+
 const TEX_BACKGROUND := preload("res://assets/environment/ocean-sky.png")
 const TEX_GUARDRAILS := preload("res://assets/environment/guardrails.png")
 const TEX_PLAYER := preload("res://assets/vehicles/player-gray.png")
@@ -73,6 +82,8 @@ var penalty_t: float = 0.0
 var boost_t: float = 0.0
 var hit_flash: float = 0.0
 var win_flash: float = 0.0
+var shake_t: float = 0.0
+var turbo_ring_t: float = 0.0
 var obstacles: Array = []
 var coins_list: Array = []
 var obstacle_timer: float = 0.0
@@ -203,6 +214,9 @@ func reset_game() -> void:
 	boost_t = 0.0
 	hit_flash = 0.0
 	win_flash = 0.0
+	shake_t = 0.0
+	turbo_ring_t = 0.0
+	position = Vector2.ZERO
 	obstacles.clear()
 	coins_list.clear()
 	obstacle_timer = 0.6
@@ -364,6 +378,7 @@ func _update_game(dt: float) -> void:
 				boost_t = 0.0
 				combo = 0
 				hit_flash = 0.25
+				shake_t = SHAKE_DURATION
 				popup_combo("HIT!", Color(1.0, 0.3, 0.3))
 		elif o["p"] >= PASS_AT:
 			o["resolved"] = true
@@ -388,6 +403,7 @@ func _update_game(dt: float) -> void:
 				if turbo_gauge >= TURBO_GAUGE_MAX:
 					is_turbo = true
 					invincible = true
+					turbo_ring_t = TURBO_RING_DURATION
 					popup_combo("TURBO!", Color(1.0, 0.478, 0.102))
 
 	coins_list = coins_list.filter(func(c): return not c["collected"] and c["p"] < REMOVE_AT)
@@ -416,6 +432,20 @@ func _update_game(dt: float) -> void:
 		hit_flash = maxf(0.0, hit_flash - dt)
 	if win_flash > 0.0:
 		win_flash = maxf(0.0, win_flash - dt)
+	if shake_t > 0.0:
+		shake_t = maxf(0.0, shake_t - dt)
+	if turbo_ring_t > 0.0:
+		turbo_ring_t = maxf(0.0, turbo_ring_t - dt)
+
+	# Camera shake only ever offsets this Node2D, never the HUD (a separate
+	# CanvasLayer, immune to its parent's 2D transform) - so it can never
+	# desync touch-button hit testing or the gameplay math, which reads the
+	# viewport size directly rather than this node's transform.
+	if shake_t > 0.0:
+		var shake_frac: float = shake_t / SHAKE_DURATION
+		position = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * SHAKE_MAGNITUDE * shake_frac
+	elif position != Vector2.ZERO:
+		position = Vector2.ZERO
 
 	if combo_popup_timer > 0.0:
 		combo_popup_timer -= dt
@@ -493,6 +523,9 @@ func _turbo_segment_color(i: int) -> Color:
 func _draw() -> void:
 	_draw_road()
 
+	if is_turbo:
+		_draw_speed_lines(elapsed_t)
+
 	# Everything on the road - coins, traffic, the finish tape, and the
 	# player - is drawn in a single depth-sorted pass so a just-passed
 	# obstacle (p > 1, "closer to camera" than the player) renders in
@@ -524,6 +557,9 @@ func _draw() -> void:
 	draw_items.sort_custom(func(a, b): return a["p"] < b["p"])
 	for item in draw_items:
 		item["cb"].call()
+
+	if turbo_ring_t > 0.0:
+		_draw_turbo_ring(px, py)
 
 	var sz := get_viewport_rect().size
 	if hit_flash > 0.0:
@@ -683,17 +719,54 @@ func _draw_finish_tape(p: float) -> void:
 	draw_string(font, text_pos, "FINISH", HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, Color.WHITE)
 
 
+# Twin exhaust flames either side of the player's rear, rather than one
+# center flame, so it reads as coming from the car's exhaust pipes.
+const FLAME_SPREAD := 11.0
+
 func _draw_flame_trail(pos: Vector2, scale: float, t: float) -> void:
 	var flicker: float = 0.7 + 0.3 * sin(t * 30.0)
 	var origin: Vector2 = pos + Vector2(0, 30.0 * scale)
-	var pts := PackedVector2Array([
-		origin + Vector2(-12.0 * scale, 0),
-		origin + Vector2(12.0 * scale, 0),
-		origin + Vector2(0, 36.0 * scale * flicker),
-	])
-	var colors := PackedColorArray([
-		Color(1.0, 0.949, 0.769, flicker),
-		Color(1.0, 0.949, 0.769, flicker),
-		Color(1.0, 0.376, 0.0, 0.0),
-	])
-	draw_polygon(pts, colors)
+	for side in [-1.0, 1.0]:
+		var fx: float = side * FLAME_SPREAD * scale
+		var pts := PackedVector2Array([
+			origin + Vector2(fx - 6.0 * scale, 0),
+			origin + Vector2(fx + 6.0 * scale, 0),
+			origin + Vector2(fx, 24.0 * scale * flicker),
+		])
+		var colors := PackedColorArray([
+			Color(1.0, 0.949, 0.769, flicker),
+			Color(1.0, 0.949, 0.769, flicker),
+			Color(1.0, 0.376, 0.0, 0.0),
+		])
+		draw_polygon(pts, colors)
+
+
+# Radial burst that marks the exact moment turbo activates, fading out over
+# TURBO_RING_DURATION - centered on the player so it reads as "bursting
+# outward from the car" rather than a generic screen-wide flash.
+func _draw_turbo_ring(px: float, py: float) -> void:
+	var t: float = 1.0 - turbo_ring_t / TURBO_RING_DURATION
+	var radius: float = lerp(18.0, 200.0, t)
+	var alpha: float = 1.0 - t
+	draw_arc(Vector2(px, py), radius, 0.0, TAU, 48, Color(1.0, 0.68, 0.15, alpha * 0.75), 6.0, true)
+
+
+# Streaks anchored to each row's own road edge and drawn outward from
+# there, so by construction they can never land inside a lane or over a
+# hazard/traffic sprite - they only ever occupy the guardrail/background
+# margin beyond the drivable road.
+func _draw_speed_lines(t: float) -> void:
+	var h := get_h()
+	var hy := horizon_y()
+	var cx := center_x()
+	var band_bottom: float = lerp(hy, h, SPEED_LINE_BAND)
+	for i in range(SPEED_LINE_COUNT):
+		var side: float = -1.0 if i % 2 == 0 else 1.0
+		var seed: float = float(i) * 12.9898
+		var phase: float = fmod(t * 2.6 + seed * 0.37, 1.0)
+		var y: float = lerp(hy, band_bottom, phase)
+		var reach: float = lerp(0.0, get_w() * 0.5, phase)
+		var x0: float = cx + side * (road_half_width(y) + 10.0)
+		var x1: float = x0 + side * reach * 0.5
+		var alpha: float = sin(phase * PI) * 0.55
+		draw_line(Vector2(x0, y), Vector2(x1, y), Color(1, 1, 1, alpha), 3.0)
