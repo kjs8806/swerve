@@ -65,7 +65,7 @@ const NEAR_MISS_FLASH_DURATION := 0.18
 
 const TEX_BACKGROUND := preload("res://assets/environment/ocean-sky.png")
 const TEX_GUARDRAILS := preload("res://assets/environment/guardrails.png")
-const HD_VEHICLE_SCALE := 0.25
+const HD_VEHICLE_SCALE := 0.30
 const TEX_PLAYER := preload("res://assets/vehicles/player-gray-hd.png")
 const TRAFFIC_TEXTURES := [
 	preload("res://assets/vehicles/traffic-coral-hd.png"),
@@ -834,7 +834,7 @@ func _draw_obstacle(obstacle: Dictionary) -> void:
 	if obstacle["kind"] == "hazard":
 		_draw_sprite_centered(HAZARD_TEXTURES[obstacle["variant"]], pos, visual_scale * HD_HAZARD_SCALE)
 	else:
-		_draw_sprite_centered(TRAFFIC_TEXTURES[obstacle["variant"]], pos, visual_scale * 0.82 * HD_VEHICLE_SCALE)
+		_draw_sprite_centered(TRAFFIC_TEXTURES[obstacle["variant"]], pos, visual_scale * HD_VEHICLE_SCALE)
 
 
 func _draw_sky(w: float, hy: float) -> void:
