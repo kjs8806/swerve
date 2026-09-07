@@ -80,7 +80,6 @@ const TEX_TURBO_EXHAUST := preload("res://assets/effects/turbo-exhaust-flames.pn
 const TEX_TURBO_RING := preload("res://assets/effects/turbo-energy-ring.png")
 const TEX_TURBO_FLASH := preload("res://assets/effects/turbo-activation-flash.png")
 const TEX_TURBO_SPEED_LINES := preload("res://assets/effects/turbo-speed-lines.png")
-const AUDIO_CONTROLLER_SCRIPT := preload("res://scripts/AudioController.gd")
 const HAZARD_TEXTURES := [
 	preload("res://assets/obstacles/pothole.png"),
 	preload("res://assets/obstacles/loose-tire.png"),
@@ -137,7 +136,7 @@ var audio_controller
 @onready var player_marker: TextureRect = $HUD/Root/ProgressTrack/PlayerMarker
 @onready var turbo_gauge_track: Control = $HUD/Root/TurboGaugeTrack
 @onready var turbo_segments: Control = $HUD/Root/TurboGaugeTrack/TurboSegments
-@onready var turbo_banner: Label = $HUD/Root/TurboBanner
+@onready var turbo_banner: Label = get_node_or_null("HUD/Root/TurboBanner") as Label
 @onready var combo_popup: Label = $HUD/Root/ComboPopup
 @onready var btn_left: TextureButton = $HUD/Root/BtnLeft
 @onready var btn_right: TextureButton = $HUD/Root/BtnRight
@@ -150,9 +149,14 @@ var audio_controller
 
 func _ready() -> void:
 	randomize()
-	audio_controller = AUDIO_CONTROLLER_SCRIPT.new()
-	audio_controller.name = "AudioController"
-	add_child(audio_controller)
+	# Audio must never prevent the race scene from starting. Load the optional
+	# controller at runtime so an unavailable decoder/resource degrades to a
+	# silent game instead of making Race.gd fail during its preload phase.
+	var controller_script := load("res://scripts/AudioController.gd")
+	if controller_script is Script and controller_script.can_instantiate():
+		audio_controller = controller_script.new()
+		audio_controller.name = "AudioController"
+		add_child(audio_controller)
 	_build_vignette_texture()
 	_build_scenery_seeds()
 	_build_turbo_segments()
@@ -160,6 +164,11 @@ func _ready() -> void:
 	btn_right.pressed.connect(func(): try_swerve(1))
 	overlay_button.pressed.connect(func(): reset_game(true))
 	set_process_unhandled_key_input(true)
+
+
+func _audio_call(method: StringName, args: Array = []) -> void:
+	if audio_controller != null and audio_controller.has_method(method):
+		audio_controller.callv(method, args)
 
 
 func _build_turbo_segments() -> void:
@@ -278,7 +287,7 @@ func reset_game(play_ui_tap: bool = false) -> void:
 	coin_timer = 0.9
 	turbo_spawn_timer = randf_range(TURBO_SPAWN_MIN, TURBO_SPAWN_MAX)
 	overlay.visible = false
-	audio_controller.begin_race(play_ui_tap)
+	_audio_call(&"begin_race", [play_ui_tap])
 
 
 func base_speed() -> float:
@@ -324,7 +333,7 @@ func try_swerve(dir: int) -> void:
 	lane_anim_from = player_lane_visual
 	player_lane = target
 	lane_anim_t = 0.0
-	audio_controller.lane_changed()
+	_audio_call(&"lane_changed")
 
 
 func _check_near_miss_on_leave(from_lane: int) -> void:
@@ -416,11 +425,11 @@ func _activate_timed_turbo() -> void:
 	is_turbo = true
 	invincible = true
 	popup_combo("TURBO! %.1fs" % TURBO_DURATION, Color(1.0, 0.478, 0.102))
-	audio_controller.turbo_charged()
+	_audio_call(&"turbo_charged")
 	if not was_active:
 		turbo_ring_t = TURBO_RING_DURATION
 		turbo_flash_t = TURBO_FLASH_DURATION
-		audio_controller.set_turbo(true)
+		_audio_call(&"set_turbo", [true])
 
 
 func _deactivate_turbo(clear_gauge: bool = true) -> void:
@@ -428,7 +437,7 @@ func _deactivate_turbo(clear_gauge: bool = true) -> void:
 	invincible = false
 	if clear_gauge:
 		turbo_gauge = 0.0
-	audio_controller.set_turbo(false)
+	_audio_call(&"set_turbo", [false])
 
 
 # ---------- Update ----------
@@ -486,7 +495,7 @@ func _update_game(dt: float) -> void:
 				hit_flash = 0.25
 				shake_t = SHAKE_DURATION
 				popup_combo("HIT!", Color(1.0, 0.3, 0.3))
-				audio_controller.collision(o["kind"] == "hazard")
+				_audio_call(&"collision", [o["kind"] == "hazard"])
 		elif o["p"] >= PASS_AT:
 			o["resolved"] = true
 			if o["dodged"] or o["was_near"]:
@@ -496,7 +505,7 @@ func _update_game(dt: float) -> void:
 				near_miss_flash = NEAR_MISS_FLASH_DURATION
 				_spawn_spark(Vector2(lane_x(o["lane"], o["p"]), row_y(o["p"])), scale_at(o["p"]), NEAR_MISS_FX_DURATION, NEAR_MISS_SPARK_COLOR)
 				popup_combo("NICE! x%d" % combo, Color(0.208, 0.878, 0.631))
-				audio_controller.combo_increased()
+				_audio_call(&"combo_increased")
 
 	obstacles = obstacles.filter(func(o): return o["p"] < REMOVE_AT)
 
@@ -509,7 +518,7 @@ func _update_game(dt: float) -> void:
 			coins += 1
 			coin_punch_t = COIN_PUNCH_DURATION
 			_spawn_spark(Vector2(lane_x(c["lane"], c["p"]), row_y(c["p"])), scale_at(c["p"]), COIN_PICKUP_FX_DURATION, COIN_SPARK_COLOR)
-			audio_controller.coin_collected()
+			_audio_call(&"coin_collected")
 
 	coins_list = coins_list.filter(func(c): return not c["collected"] and c["p"] < REMOVE_AT)
 
@@ -586,13 +595,13 @@ func _update_game(dt: float) -> void:
 		win_flash = 0.5
 		_deactivate_turbo()
 		turbo_pickups.clear()
-		audio_controller.finish_race(true)
+		_audio_call(&"finish_race", [true])
 		_show_end_screen(true)
 	elif time >= RACE_TIME:
 		state = State.LOSE
 		_deactivate_turbo()
 		turbo_pickups.clear()
-		audio_controller.finish_race(false)
+		_audio_call(&"finish_race", [false])
 		_show_end_screen(false)
 
 
@@ -612,7 +621,7 @@ func _show_end_screen(won: bool) -> void:
 func _update_hud() -> void:
 	var remaining: float = maxf(0.0, RACE_TIME - time)
 	if state == State.PLAYING:
-		audio_controller.update_countdown(remaining)
+		_audio_call(&"update_countdown", [remaining])
 	timer_label.text = "%.1f" % remaining
 	timer_label.modulate = Color8(0xff, 0x4d, 0x4d) if remaining < 10.0 else Color8(0xff, 0xcc, 0x33)
 	coin_label.text = "%d" % coins
@@ -636,8 +645,9 @@ func _update_hud() -> void:
 			segment.modulate = Color(1.0, lerpf(0.12, 0.95, color_t), 0.05, 1.0)
 		else:
 			segment.modulate = Color(0.12, 0.16, 0.22, 0.55)
-	turbo_banner.visible = is_turbo
-	if is_turbo:
+	if turbo_banner != null:
+		turbo_banner.visible = is_turbo
+	if is_turbo and turbo_banner != null:
 		var glow: float = 0.8 + 0.2 * sin(elapsed_t * 8.0)
 		turbo_banner.modulate = Color(glow, glow, glow, 1.0)
 
@@ -757,7 +767,7 @@ func _draw_road() -> void:
 	draw_colored_polygon(poly_hi, Color(0.28, 0.31, 0.4, 0.55))
 
 	for i in range(1, LANES):
-		var frac := LANE_EDGES[i]
+		var frac: float = LANE_EDGES[i]
 		var x0: float = cx + frac * half_width_at(0.0)
 		var x1: float = cx + frac * half_width_at(1.0)
 		_draw_dashed_line(Vector2(x0, hy), Vector2(x1, h), Color(1, 1, 1, 0.88), 4.0, 16.0, 15.0, fmod(road_scroll, 31.0))
