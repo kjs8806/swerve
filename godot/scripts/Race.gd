@@ -126,6 +126,7 @@ var turbo_spawn_timer: float = 0.0
 var elapsed_t: float = 0.0
 var lane_change_lock_until: int = 0
 var combo_popup_timer: float = 0.0
+var combo_badge_tween: Tween
 var vignette_tex: GradientTexture2D
 var cloud_seeds: Array = []
 var rock_seeds: Array = []
@@ -134,6 +135,8 @@ var audio_controller
 # ---------- HUD refs ----------
 @onready var timer_label: Label = $HUD/Root/TimerPanel/TimerLabel
 @onready var coin_label: Label = $HUD/Root/CoinPanel/CoinLabel
+@onready var combo_panel: Control = $HUD/Root/ComboPanel
+@onready var combo_art: TextureRect = $HUD/Root/ComboPanel/ComboArt
 @onready var combo_label: Label = $HUD/Root/ComboPanel/ComboLabel
 @onready var progress_track: Control = $HUD/Root/ProgressTrack
 @onready var player_marker: TextureRect = $HUD/Root/ProgressTrack/PlayerMarker
@@ -332,6 +335,26 @@ func popup_combo(text: String, color: Color) -> void:
 	combo_popup_timer = 0.65
 
 
+func _play_combo_badge_fx() -> void:
+	if combo_badge_tween != null and combo_badge_tween.is_valid():
+		combo_badge_tween.kill()
+	combo_panel.pivot_offset = combo_panel.size * Vector2(0.82, 0.5)
+	combo_panel.scale = Vector2(0.72, 0.72)
+	combo_panel.rotation = -0.045
+	combo_panel.modulate = Color(1.0, 0.82, 0.42, 0.25)
+	combo_art.position.x = 24.0
+	combo_art.modulate = Color(1.35, 1.12, 0.72, 1.0)
+	combo_badge_tween = create_tween().set_parallel(true)
+	combo_badge_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	combo_badge_tween.tween_property(combo_panel, "scale", Vector2(1.12, 1.12), 0.14)
+	combo_badge_tween.tween_property(combo_panel, "rotation", 0.0, 0.14)
+	combo_badge_tween.tween_property(combo_panel, "modulate", Color.WHITE, 0.10)
+	combo_badge_tween.tween_property(combo_art, "position:x", 0.0, 0.16)
+	combo_badge_tween.tween_property(combo_art, "modulate", Color.WHITE, 0.22)
+	combo_badge_tween.chain().set_parallel(false)
+	combo_badge_tween.tween_property(combo_panel, "scale", Vector2.ONE, 0.16).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+
 # ---------- Input ----------
 func try_swerve(dir: int) -> void:
 	if state != State.PLAYING:
@@ -519,6 +542,7 @@ func _update_game(dt: float) -> void:
 				near_miss_flash = NEAR_MISS_FLASH_DURATION
 				_spawn_spark(Vector2(lane_x(o["lane"], o["p"]), row_y(o["p"])), scale_at(o["p"]), NEAR_MISS_FX_DURATION, NEAR_MISS_SPARK_COLOR)
 				popup_combo("NICE! x%d" % combo, Color(0.208, 0.878, 0.631))
+				_play_combo_badge_fx()
 				_audio_call(&"combo_increased")
 
 	obstacles = obstacles.filter(func(o): return o["p"] < REMOVE_AT)
