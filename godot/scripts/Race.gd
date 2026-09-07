@@ -49,7 +49,6 @@ const TRAFFIC_TEXTURES := [
 const TEX_COIN := preload("res://assets/collectibles/coin.png")
 const TEX_TURBO_PICKUP := preload("res://assets/collectibles/turbo-pickup.png")
 const TEX_TURBO_SEGMENT := preload("res://assets/hud/turbo-segment.png")
-const AUDIO_CONTROLLER_SCRIPT := preload("res://scripts/AudioController.gd")
 const HAZARD_TEXTURES := [
 	preload("res://assets/obstacles/pothole.png"),
 	preload("res://assets/obstacles/loose-tire.png"),
@@ -113,9 +112,14 @@ var audio_controller
 
 func _ready() -> void:
 	randomize()
-	audio_controller = AUDIO_CONTROLLER_SCRIPT.new()
-	audio_controller.name = "AudioController"
-	add_child(audio_controller)
+	# Audio must never prevent the race scene from starting. Load the optional
+	# controller at runtime so an unavailable decoder/resource degrades to a
+	# silent game instead of making Race.gd fail during its preload phase.
+	var controller_script := load("res://scripts/AudioController.gd")
+	if controller_script is Script and controller_script.can_instantiate():
+		audio_controller = controller_script.new()
+		audio_controller.name = "AudioController"
+		add_child(audio_controller)
 	_build_vignette_texture()
 	_build_scenery_seeds()
 	_build_turbo_segments()
@@ -123,6 +127,11 @@ func _ready() -> void:
 	btn_right.pressed.connect(func(): try_swerve(1))
 	overlay_button.pressed.connect(func(): reset_game(true))
 	set_process_unhandled_key_input(true)
+
+
+func _audio_call(method: StringName, args: Array = []) -> void:
+	if audio_controller != null and audio_controller.has_method(method):
+		audio_controller.callv(method, args)
 
 
 func _build_turbo_segments() -> void:
@@ -234,7 +243,7 @@ func reset_game(play_ui_tap: bool = false) -> void:
 	coin_timer = 0.9
 	turbo_spawn_timer = randf_range(TURBO_SPAWN_MIN, TURBO_SPAWN_MAX)
 	overlay.visible = false
-	audio_controller.begin_race(play_ui_tap)
+	_audio_call(&"begin_race", [play_ui_tap])
 
 
 func base_speed() -> float:
@@ -276,7 +285,7 @@ func try_swerve(dir: int) -> void:
 	lane_anim_from = player_lane_visual
 	player_lane = target
 	lane_anim_t = 0.0
-	audio_controller.lane_changed()
+	_audio_call(&"lane_changed")
 
 
 func _check_near_miss_on_leave(from_lane: int) -> void:
@@ -350,9 +359,9 @@ func _activate_timed_turbo() -> void:
 	is_turbo = true
 	invincible = true
 	popup_combo("TURBO! %.1fs" % TURBO_DURATION, Color(1.0, 0.478, 0.102))
-	audio_controller.turbo_charged()
+	_audio_call(&"turbo_charged")
 	if not was_active:
-		audio_controller.set_turbo(true)
+		_audio_call(&"set_turbo", [true])
 
 
 func _deactivate_turbo(clear_gauge: bool = true) -> void:
@@ -360,7 +369,7 @@ func _deactivate_turbo(clear_gauge: bool = true) -> void:
 	invincible = false
 	if clear_gauge:
 		turbo_gauge = 0.0
-	audio_controller.set_turbo(false)
+	_audio_call(&"set_turbo", [false])
 
 
 # ---------- Update ----------
@@ -417,7 +426,7 @@ func _update_game(dt: float) -> void:
 				combo = 0
 				hit_flash = 0.25
 				popup_combo("HIT!", Color(1.0, 0.3, 0.3))
-				audio_controller.collision(o["kind"] == "hazard")
+				_audio_call(&"collision", [o["kind"] == "hazard"])
 		elif o["p"] >= PASS_AT:
 			o["resolved"] = true
 			if o["dodged"] or o["was_near"]:
@@ -425,7 +434,7 @@ func _update_game(dt: float) -> void:
 				combo += 1
 				best_combo = maxi(best_combo, combo)
 				popup_combo("NICE! x%d" % combo, Color(0.208, 0.878, 0.631))
-				audio_controller.combo_increased()
+				_audio_call(&"combo_increased")
 
 	obstacles = obstacles.filter(func(o): return o["p"] < REMOVE_AT)
 
@@ -436,7 +445,7 @@ func _update_game(dt: float) -> void:
 		if c["lane"] == player_lane and c["p"] >= DANGER_ZONE_START and c["p"] < COLLIDE_AT + 0.05:
 			c["collected"] = true
 			coins += 1
-			audio_controller.coin_collected()
+			_audio_call(&"coin_collected")
 
 	coins_list = coins_list.filter(func(c): return not c["collected"] and c["p"] < REMOVE_AT)
 
@@ -490,13 +499,13 @@ func _update_game(dt: float) -> void:
 		win_flash = 0.5
 		_deactivate_turbo()
 		turbo_pickups.clear()
-		audio_controller.finish_race(true)
+		_audio_call(&"finish_race", [true])
 		_show_end_screen(true)
 	elif time >= RACE_TIME:
 		state = State.LOSE
 		_deactivate_turbo()
 		turbo_pickups.clear()
-		audio_controller.finish_race(false)
+		_audio_call(&"finish_race", [false])
 		_show_end_screen(false)
 
 
@@ -516,7 +525,7 @@ func _show_end_screen(won: bool) -> void:
 func _update_hud() -> void:
 	var remaining: float = maxf(0.0, RACE_TIME - time)
 	if state == State.PLAYING:
-		audio_controller.update_countdown(remaining)
+		_audio_call(&"update_countdown", [remaining])
 	timer_label.text = "%.1f" % remaining
 	timer_label.modulate = Color8(0xff, 0x4d, 0x4d) if remaining < 10.0 else Color8(0xff, 0xcc, 0x33)
 	coin_label.text = "%d" % coins
