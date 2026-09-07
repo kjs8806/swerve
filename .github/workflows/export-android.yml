@@ -52,6 +52,7 @@ jobs:
       - name: Smoke-test game startup
         run: |
           set -o pipefail
+          godot --headless --editor --path godot --quit
           timeout 8s godot --headless --path godot --quit-after 3 2>&1 | tee /tmp/godot-startup.log
           if grep -E "SCRIPT ERROR|Parse Error|Invalid access|Invalid call|ERROR:" /tmp/godot-startup.log; then
             echo "Godot startup errors detected"
