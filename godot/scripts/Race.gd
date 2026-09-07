@@ -7,8 +7,8 @@ extends Node2D
 
 # ---------- Config ----------
 const LANES := 5
-const LANE_EDGES := [-1.0, -0.70, -0.20, 0.20, 0.70, 1.0]
-const LANE_CENTERS := [-0.85, -0.45, 0.0, 0.45, 0.85]
+const LANE_EDGES: Array[float] = [-1.0, -0.70, -0.20, 0.20, 0.70, 1.0]
+const LANE_CENTERS: Array[float] = [-0.85, -0.45, 0.0, 0.45, 0.85]
 const RACE_TIME := 60.0
 const FINISH_DISTANCE := 13000.0
 const ROAD_LENGTH := 260.0
@@ -36,6 +36,31 @@ const FINISH_REVEAL_RANGE := ROAD_LENGTH * 2.5
 
 const LANE_CHANGE_TIME := 0.14
 
+# Impact/turbo feedback - kept brief, low-alpha, and/or geometrically
+# confined (see _draw_turbo_ring/_draw_turbo_flash/_draw_speed_lines) so
+# they read clearly without ever covering a lane or disabling input.
+const SHAKE_DURATION := 0.22
+const SHAKE_MAGNITUDE := 9.0
+const TURBO_FLASH_DURATION := 0.28
+const TURBO_RING_DURATION := 0.5
+const SPEED_LINE_ALPHA := 0.55
+const SPEED_LINE_PULSE_SPEED := 3.0
+
+# Coin pickup feedback: a quick punch on the HUD counter plus a brief
+# in-world sparkle (see spark_fx below) at the exact pickup point.
+const COIN_PUNCH_DURATION := 0.18
+const COIN_PUNCH_SCALE := 1.35
+const COIN_PICKUP_FX_DURATION := 0.3
+const COIN_SPARK_COLOR := Color(1.0, 0.85, 0.3)
+
+# Near-miss feedback: same expanding-spark mechanic as a coin pickup (see
+# spark_fx below), positioned at the dodged obstacle, plus a light screen
+# tint - far more restrained than hit_flash since this rewards the player
+# rather than punishing them.
+const NEAR_MISS_FX_DURATION := 0.3
+const NEAR_MISS_SPARK_COLOR := Color(0.208, 0.878, 0.631)
+const NEAR_MISS_FLASH_DURATION := 0.18
+
 const TEX_BACKGROUND := preload("res://assets/environment/ocean-sky.png")
 const TEX_GUARDRAILS := preload("res://assets/environment/guardrails.png")
 const TEX_PLAYER := preload("res://assets/vehicles/player-gray.png")
@@ -49,6 +74,12 @@ const TRAFFIC_TEXTURES := [
 const TEX_COIN := preload("res://assets/collectibles/coin.png")
 const TEX_TURBO_PICKUP := preload("res://assets/collectibles/turbo-pickup.png")
 const TEX_TURBO_SEGMENT := preload("res://assets/hud/turbo-segment.png")
+
+# Approved turbo-effect sprites.
+const TEX_TURBO_EXHAUST := preload("res://assets/effects/turbo-exhaust-flames.png")
+const TEX_TURBO_RING := preload("res://assets/effects/turbo-energy-ring.png")
+const TEX_TURBO_FLASH := preload("res://assets/effects/turbo-activation-flash.png")
+const TEX_TURBO_SPEED_LINES := preload("res://assets/effects/turbo-speed-lines.png")
 const HAZARD_TEXTURES := [
 	preload("res://assets/obstacles/pothole.png"),
 	preload("res://assets/obstacles/loose-tire.png"),
@@ -75,6 +106,12 @@ var penalty_t: float = 0.0
 var boost_t: float = 0.0
 var hit_flash: float = 0.0
 var win_flash: float = 0.0
+var shake_t: float = 0.0
+var turbo_ring_t: float = 0.0
+var turbo_flash_t: float = 0.0
+var coin_punch_t: float = 0.0
+var near_miss_flash: float = 0.0
+var spark_fx: Array = [] # {pos, scale, t, duration, color} - coin pickups + near-misses
 var road_scroll: float = 0.0
 var obstacles: Array = []
 var coins_list: Array = []
@@ -235,6 +272,13 @@ func reset_game(play_ui_tap: bool = false) -> void:
 	boost_t = 0.0
 	hit_flash = 0.0
 	win_flash = 0.0
+	shake_t = 0.0
+	turbo_ring_t = 0.0
+	turbo_flash_t = 0.0
+	coin_punch_t = 0.0
+	near_miss_flash = 0.0
+	spark_fx.clear()
+	position = Vector2.ZERO
 	road_scroll = 0.0
 	obstacles.clear()
 	coins_list.clear()
@@ -260,6 +304,10 @@ func current_speed() -> float:
 	if is_turbo:
 		mult *= TURBO_MULT
 	return base_speed() * mult
+
+
+func _spawn_spark(pos: Vector2, scale: float, duration: float, color: Color) -> void:
+	spark_fx.append({"pos": pos, "scale": scale, "t": duration, "duration": duration, "color": color})
 
 
 func popup_combo(text: String, color: Color) -> void:
@@ -308,9 +356,17 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 
 # ---------- Spawning ----------
+# Spawn intervals shrink to well under an obstacle's ~1.2-1.5s travel time
+# at high difficulty, so waves overlap on the road - picking lanes only
+# from THIS wave's own set (the old approach) can't see obstacles a
+# previous wave left in flight, and the two together can end up covering
+# every lane at once (verified by simulation: possible with the old
+# per-wave-only logic). Guaranteeing a stronger, simpler invariant instead
+# - at least one lane is always completely free of any unresolved
+# obstacle - makes that structurally impossible regardless of how waves
+# overlap.
 func _spawn_obstacle_wave() -> void:
 	var t := time
-	var open_lanes: int = (LANES - 1) if t < 8.0 else (LANES - 2)
 	var count: int
 	if t < 8.0:
 		count = 1
@@ -318,22 +374,32 @@ func _spawn_obstacle_wave() -> void:
 		count = 1 if randf() < 0.6 else 2
 	else:
 		count = 2 if randf() < 0.5 else 3
-	count = clampi(count, 1, LANES - maxi(1, LANES - open_lanes))
-	count = mini(count, LANES - 1)
 
-	var lanes: Array = []
+	var occupied_lanes: Dictionary = {}
+	for o in obstacles:
+		if not o["resolved"]:
+			occupied_lanes[o["lane"]] = true
+
+	var free_lanes: Array = []
 	for i in range(LANES):
-		lanes.append(i)
-	for i in range(lanes.size() - 1, 0, -1):
+		if not occupied_lanes.has(i):
+			free_lanes.append(i)
+
+	# Leave at least one already-free lane untouched by this wave too.
+	count = mini(count, maxi(0, free_lanes.size() - 1))
+	if count <= 0:
+		return
+
+	for i in range(free_lanes.size() - 1, 0, -1):
 		var j := randi() % (i + 1)
-		var tmp = lanes[i]
-		lanes[i] = lanes[j]
-		lanes[j] = tmp
+		var tmp = free_lanes[i]
+		free_lanes[i] = free_lanes[j]
+		free_lanes[j] = tmp
 
 	for i in range(count):
 		var is_hazard := randf() < 0.32
 		obstacles.append({
-			"lane": lanes[i], "p": 0.0, "resolved": false,
+			"lane": free_lanes[i], "p": 0.0, "resolved": false,
 			"dodged": false, "was_near": false,
 			"kind": "hazard" if is_hazard else "traffic",
 			"variant": randi() % (HAZARD_TEXTURES.size() if is_hazard else TRAFFIC_TEXTURES.size()),
@@ -361,6 +427,8 @@ func _activate_timed_turbo() -> void:
 	popup_combo("TURBO! %.1fs" % TURBO_DURATION, Color(1.0, 0.478, 0.102))
 	_audio_call(&"turbo_charged")
 	if not was_active:
+		turbo_ring_t = TURBO_RING_DURATION
+		turbo_flash_t = TURBO_FLASH_DURATION
 		_audio_call(&"set_turbo", [true])
 
 
@@ -425,6 +493,7 @@ func _update_game(dt: float) -> void:
 				boost_t = 0.0
 				combo = 0
 				hit_flash = 0.25
+				shake_t = SHAKE_DURATION
 				popup_combo("HIT!", Color(1.0, 0.3, 0.3))
 				_audio_call(&"collision", [o["kind"] == "hazard"])
 		elif o["p"] >= PASS_AT:
@@ -433,6 +502,8 @@ func _update_game(dt: float) -> void:
 				boost_t = BOOST_TIME
 				combo += 1
 				best_combo = maxi(best_combo, combo)
+				near_miss_flash = NEAR_MISS_FLASH_DURATION
+				_spawn_spark(Vector2(lane_x(o["lane"], o["p"]), row_y(o["p"])), scale_at(o["p"]), NEAR_MISS_FX_DURATION, NEAR_MISS_SPARK_COLOR)
 				popup_combo("NICE! x%d" % combo, Color(0.208, 0.878, 0.631))
 				_audio_call(&"combo_increased")
 
@@ -445,6 +516,8 @@ func _update_game(dt: float) -> void:
 		if c["lane"] == player_lane and c["p"] >= DANGER_ZONE_START and c["p"] < COLLIDE_AT + 0.05:
 			c["collected"] = true
 			coins += 1
+			coin_punch_t = COIN_PUNCH_DURATION
+			_spawn_spark(Vector2(lane_x(c["lane"], c["p"]), row_y(c["p"])), scale_at(c["p"]), COIN_PICKUP_FX_DURATION, COIN_SPARK_COLOR)
 			_audio_call(&"coin_collected")
 
 	coins_list = coins_list.filter(func(c): return not c["collected"] and c["p"] < REMOVE_AT)
@@ -488,6 +561,29 @@ func _update_game(dt: float) -> void:
 		hit_flash = maxf(0.0, hit_flash - dt)
 	if win_flash > 0.0:
 		win_flash = maxf(0.0, win_flash - dt)
+	if shake_t > 0.0:
+		shake_t = maxf(0.0, shake_t - dt)
+	if turbo_ring_t > 0.0:
+		turbo_ring_t = maxf(0.0, turbo_ring_t - dt)
+	if turbo_flash_t > 0.0:
+		turbo_flash_t = maxf(0.0, turbo_flash_t - dt)
+	if coin_punch_t > 0.0:
+		coin_punch_t = maxf(0.0, coin_punch_t - dt)
+	if near_miss_flash > 0.0:
+		near_miss_flash = maxf(0.0, near_miss_flash - dt)
+	for fx in spark_fx:
+		fx["t"] -= dt
+	spark_fx = spark_fx.filter(func(fx): return fx["t"] > 0.0)
+
+	# Camera shake only ever offsets this Node2D, never the HUD (a separate
+	# CanvasLayer, immune to its parent's 2D transform) - so it can never
+	# desync touch-button hit testing or the gameplay math, which reads the
+	# viewport size directly rather than this node's transform.
+	if shake_t > 0.0:
+		var shake_frac: float = shake_t / SHAKE_DURATION
+		position = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * SHAKE_MAGNITUDE * shake_frac
+	elif position != Vector2.ZERO:
+		position = Vector2.ZERO
 
 	if combo_popup_timer > 0.0:
 		combo_popup_timer -= dt
@@ -529,6 +625,9 @@ func _update_hud() -> void:
 	timer_label.text = "%.1f" % remaining
 	timer_label.modulate = Color8(0xff, 0x4d, 0x4d) if remaining < 10.0 else Color8(0xff, 0xcc, 0x33)
 	coin_label.text = "%d" % coins
+	coin_label.pivot_offset = coin_label.size * 0.5
+	var coin_punch_frac: float = coin_punch_t / COIN_PUNCH_DURATION
+	coin_label.scale = Vector2.ONE * (1.0 + (COIN_PUNCH_SCALE - 1.0) * coin_punch_frac)
 	combo_label.text = "%dx" % maxi(1, combo)
 
 	var pct: float = clampf(distance / FINISH_DISTANCE, 0.0, 1.0)
@@ -595,9 +694,19 @@ func _draw() -> void:
 	for item in draw_items:
 		item["cb"].call()
 
+	for fx in spark_fx:
+		_draw_spark_fx(fx)
+
+	if turbo_ring_t > 0.0:
+		_draw_turbo_ring(px, py)
+	if turbo_flash_t > 0.0:
+		_draw_turbo_flash(px, py)
+
 	var sz := get_viewport_rect().size
 	if hit_flash > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, sz), Color(1, 0, 0, hit_flash * 0.35))
+	if near_miss_flash > 0.0:
+		draw_rect(Rect2(Vector2.ZERO, sz), Color(0.208, 0.878, 0.631, near_miss_flash / NEAR_MISS_FLASH_DURATION * 0.14))
 	if win_flash > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, sz), Color(1, 1, 1, win_flash * 0.6))
 	if is_turbo:
@@ -803,6 +912,18 @@ func _draw_coin(pos: Vector2, scale: float) -> void:
 	draw_texture_rect(TEX_COIN, Rect2(pos - size * 0.5, size), false)
 
 
+# Quick colored ring expanding from a world position - shared by coin
+# pickups (gold) and near-misses (teal). No dedicated sparkle asset exists
+# for either yet, so this stays procedural.
+func _draw_spark_fx(fx: Dictionary) -> void:
+	var t: float = 1.0 - fx["t"] / fx["duration"]
+	var radius: float = lerp(4.0, 26.0, t) * fx["scale"]
+	var alpha: float = 1.0 - t
+	var col: Color = fx["color"]
+	col.a = alpha * 0.9
+	draw_arc(fx["pos"], radius, 0.0, TAU, 20, col, 3.0 * fx["scale"], true)
+
+
 func _draw_turbo_pickup(pickup: Dictionary) -> void:
 	var p: float = pickup["p"]
 	var pos := Vector2(lane_x(pickup["lane"], p), row_y(p))
@@ -837,32 +958,53 @@ func _draw_finish_tape(p: float) -> void:
 	draw_string(font, text_pos, "FINISH", HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, Color.WHITE)
 
 
-func _draw_speed_lines(t: float) -> void:
-	var cx := center_x()
-	var cy := horizon_y()
-	var w := get_w()
-	var h := get_h()
-	var count := 14
-	for i in range(count):
-		var angle: float = (float(i) / count) * TAU + t * 0.6
-		var wobble: float = 0.85 + 0.15 * sin(t * 4.0 + i)
-		var length: float = maxf(w, h) * 0.75 * wobble
-		var p1 := Vector2(cx + cos(angle) * 18.0, cy + sin(angle) * 18.0 * 0.4)
-		var p2 := Vector2(cx + cos(angle) * length, cy + sin(angle) * length * 0.4)
-		draw_line(p1, p2, Color(1.0, 0.784, 0.47, 0.5), 2.0 + 2.0 * wobble)
+# Approved twin-exhaust-flame sprite (already a matched left/right pair in
+# one image) anchored just behind the player's rear, scaled off the car's
+# own perspective scale so it shrinks/grows with the car.
+const FLAME_TEX_SCALE := 0.34
 
 
 func _draw_flame_trail(pos: Vector2, scale: float, t: float) -> void:
-	var flicker: float = 0.7 + 0.3 * sin(t * 30.0)
-	var origin: Vector2 = pos + Vector2(0, 30.0 * scale)
-	var pts := PackedVector2Array([
-		origin + Vector2(-12.0 * scale, 0),
-		origin + Vector2(12.0 * scale, 0),
-		origin + Vector2(0, 36.0 * scale * flicker),
-	])
-	var colors := PackedColorArray([
-		Color(1.0, 0.949, 0.769, flicker),
-		Color(1.0, 0.949, 0.769, flicker),
-		Color(1.0, 0.376, 0.0, 0.0),
-	])
-	draw_polygon(pts, colors)
+	var flicker: float = 0.82 + 0.18 * sin(t * 30.0)
+	var size: Vector2 = TEX_TURBO_EXHAUST.get_size() * (FLAME_TEX_SCALE * scale)
+	var origin: Vector2 = pos + Vector2(0.0, 26.0 * scale)
+	draw_texture_rect(TEX_TURBO_EXHAUST, Rect2(origin - Vector2(size.x * 0.5, 0.0), size), false, Color(1, 1, 1, flicker))
+
+
+# Approved energy-ring sprite, scaled up and faded out over
+# TURBO_RING_DURATION - centered on the player so it reads as "bursting
+# outward from the car" rather than a generic screen-wide flash.
+const RING_TEX_MIN_SCALE := 0.2
+const RING_TEX_MAX_SCALE := 1.0
+
+func _draw_turbo_ring(px: float, py: float) -> void:
+	var t: float = 1.0 - turbo_ring_t / TURBO_RING_DURATION
+	var scale: float = lerp(RING_TEX_MIN_SCALE, RING_TEX_MAX_SCALE, t)
+	var alpha: float = 1.0 - t
+	var size: Vector2 = TEX_TURBO_RING.get_size() * scale
+	draw_texture_rect(TEX_TURBO_RING, Rect2(Vector2(px, py) - size * 0.5, size), false, Color(1, 1, 1, alpha))
+
+
+# Approved activation-flash sprite - kept small and quick (TURBO_FLASH_DURATION)
+# so the burst reads as a hit of energy without ever covering nearby lanes.
+const FLASH_TEX_SCALE := 0.32
+
+func _draw_turbo_flash(px: float, py: float) -> void:
+	var t: float = 1.0 - turbo_flash_t / TURBO_FLASH_DURATION
+	var scale: float = lerp(0.5, 1.0, t) * FLASH_TEX_SCALE
+	var alpha: float = 1.0 - t
+	var size: Vector2 = TEX_TURBO_FLASH.get_size() * scale
+	draw_texture_rect(TEX_TURBO_FLASH, Rect2(Vector2(px, py) - size * 0.5, size), false, Color(1, 1, 1, alpha))
+
+
+# Approved speed-line burst, stretched to cover the viewport - the art
+# itself is mostly negative space between rays, so traffic/hazards stay
+# readable through the gaps rather than being covered by a solid layer.
+# Alpha is tied to the remaining turbo gauge (not just is_turbo) so it
+# tapers off smoothly as turbo drains instead of vanishing on the frame
+# is_turbo flips false.
+func _draw_speed_lines(t: float) -> void:
+	var pulse: float = 0.85 + 0.15 * sin(t * SPEED_LINE_PULSE_SPEED)
+	var fade_out: float = clampf(turbo_gauge / (TURBO_GAUGE_MAX * 0.15), 0.0, 1.0)
+	var alpha: float = SPEED_LINE_ALPHA * pulse * fade_out
+	draw_texture_rect(TEX_TURBO_SPEED_LINES, Rect2(0, 0, get_w(), get_h()), false, Color(1, 1, 1, alpha))
