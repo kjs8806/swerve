@@ -6,6 +6,8 @@ extends Node2D
 # approach changes (Godot's immediate-mode _draw() instead of Canvas2D).
 
 # ---------- Config ----------
+const ComboCalloutConfig := preload("res://scripts/ComboCalloutConfig.gd")
+
 const LANES := 5
 const LANE_EDGES: Array[float] = [-1.0, -0.70, -0.20, 0.20, 0.70, 1.0]
 const LANE_CENTERS: Array[float] = [-0.85, -0.45, 0.0, 0.45, 0.85]
@@ -541,9 +543,10 @@ func _update_game(dt: float) -> void:
 				best_combo = maxi(best_combo, combo)
 				near_miss_flash = NEAR_MISS_FLASH_DURATION
 				_spawn_spark(Vector2(lane_x(o["lane"], o["p"]), row_y(o["p"])), scale_at(o["p"]), NEAR_MISS_FX_DURATION, NEAR_MISS_SPARK_COLOR)
-				popup_combo("NICE! x%d" % combo, Color(0.208, 0.878, 0.631))
+				var callout := ComboCalloutConfig.for_combo(combo)
+				popup_combo(callout["text"], Color(1.0, 0.78, 0.05))
 				_play_combo_badge_fx()
-				_audio_call(&"combo_increased")
+				_audio_call(&"combo_increased", [combo])
 
 	obstacles = obstacles.filter(func(o): return o["p"] < REMOVE_AT)
 

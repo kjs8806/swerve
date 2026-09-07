@@ -1,5 +1,7 @@
 extends Node
 
+const ComboCalloutConfig := preload("res://scripts/ComboCalloutConfig.gd")
+
 # Centralized, allocation-light audio integration for the race scene. Persistent
 # players are reused for the whole session; gameplay code only calls semantic
 # event methods and never needs to know about streams or mixing details.
@@ -39,6 +41,7 @@ const STREAM_FINISH_WIN := preload("res://assets/audio/finish-win.wav")
 const STREAM_TIME_UP := preload("res://assets/audio/time-up-failure.wav")
 
 var background_music: AudioStreamPlayer
+var combo_voice: AudioStreamPlayer
 var engine_idle: AudioStreamPlayer
 var engine_drive: AudioStreamPlayer
 var turbo_sustain: AudioStreamPlayer
@@ -56,6 +59,7 @@ var last_countdown_second := -1
 
 func _ready() -> void:
 	background_music = _make_player("BackgroundMusic", STREAM_BACKGROUND_MUSIC, SILENT_DB)
+	combo_voice = _make_player("ComboVoice", ComboCalloutConfig.stream_for_combo(1), -4.0)
 	engine_idle = _make_player("EngineIdle", STREAM_ENGINE_IDLE, ENGINE_IDLE_DB)
 	engine_drive = _make_player("EngineDrive", STREAM_ENGINE_DRIVE, SILENT_DB)
 	turbo_sustain = _make_player("TurboSustain", STREAM_TURBO_SUSTAIN, SILENT_DB)
@@ -206,8 +210,12 @@ func coin_collected() -> void:
 	_play("coin")
 
 
-func combo_increased() -> void:
+func combo_increased(combo_value: int = 1) -> void:
 	_play("combo")
+	# Only the newest praise line should be heard when combos increase quickly.
+	combo_voice.stop()
+	combo_voice.stream = ComboCalloutConfig.stream_for_combo(combo_value)
+	combo_voice.play()
 
 
 func collision(is_road_hazard: bool) -> void:
