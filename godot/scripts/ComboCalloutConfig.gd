@@ -12,7 +12,7 @@ const CALLOUTS: Array[Dictionary] = [
 	{"text": "Fabulous", "stream": preload("res://assets/audio/combo-voice/callout-07-fabulous.wav")},
 	{"text": "Spectacular!", "stream": preload("res://assets/audio/combo-voice/callout-08-spectacular.wav")},
 	{"text": "Wicked!", "stream": preload("res://assets/audio/combo-voice/callout-09-wicked.wav")},
-	{"text": "Oh My God!!", "stream": preload("res://assets/audio/combo-voice/callout-10-oh-my-god.wav")},
+	{"text": "Swerve!", "stream": preload("res://assets/audio/combo-voice/callout-10-swerve.wav")},
 ]
 
 
