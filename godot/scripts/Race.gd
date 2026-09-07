@@ -7,8 +7,8 @@ extends Node2D
 
 # ---------- Config ----------
 const LANES := 5
-const LANE_EDGES: Array[float] = [-1.0, -0.60, -0.20, 0.20, 0.60, 1.0]
-const LANE_CENTERS: Array[float] = [-0.80, -0.40, 0.0, 0.40, 0.80]
+const LANE_EDGES: Array[float] = [-1.0, -0.70, -0.20, 0.20, 0.70, 1.0]
+const LANE_CENTERS: Array[float] = [-0.85, -0.45, 0.0, 0.45, 0.85]
 const RACE_TIME := 60.0
 const FINISH_DISTANCE := 13000.0
 const ROAD_LENGTH := 260.0
@@ -16,7 +16,6 @@ const ROAD_LENGTH := 260.0
 const BASE_SPEED_START := 150.0
 const BASE_SPEED_RAMP := 3.2
 const BASE_SPEED_MAX := 340.0
-const TRAFFIC_SPEED_MULT := 0.8
 
 const COLLISION_PENALTY_MULT := 0.22
 const COLLISION_RECOVER_TIME := 1.7
@@ -24,8 +23,10 @@ const BOOST_MULT := 1.28
 const BOOST_TIME := 1.4
 const TURBO_MULT := 1.9
 const TURBO_GAUGE_MAX := 100.0
-const TURBO_GAIN_PER_COIN := 20.0
-const TURBO_DRAIN_PER_SEC := TURBO_GAUGE_MAX / 4.2
+const TURBO_DURATION := 4.2
+const TURBO_DRAIN_PER_SEC := TURBO_GAUGE_MAX / TURBO_DURATION
+const TURBO_SPAWN_MIN := 7.0
+const TURBO_SPAWN_MAX := 11.0
 
 const DANGER_ZONE_START := 0.83
 const COLLIDE_AT := 0.97
@@ -71,6 +72,7 @@ const TRAFFIC_TEXTURES := [
 	preload("res://assets/vehicles/traffic-orange.png"),
 ]
 const TEX_COIN := preload("res://assets/collectibles/coin.png")
+const TEX_TURBO_PICKUP := preload("res://assets/collectibles/turbo-pickup.png")
 const TEX_TURBO_SEGMENT := preload("res://assets/hud/turbo-segment.png")
 
 # Approved turbo-effect sprites.
@@ -78,6 +80,7 @@ const TEX_TURBO_EXHAUST := preload("res://assets/effects/turbo-exhaust-flames.pn
 const TEX_TURBO_RING := preload("res://assets/effects/turbo-energy-ring.png")
 const TEX_TURBO_FLASH := preload("res://assets/effects/turbo-activation-flash.png")
 const TEX_TURBO_SPEED_LINES := preload("res://assets/effects/turbo-speed-lines.png")
+const AUDIO_CONTROLLER_SCRIPT := preload("res://scripts/AudioController.gd")
 const HAZARD_TEXTURES := [
 	preload("res://assets/obstacles/pothole.png"),
 	preload("res://assets/obstacles/loose-tire.png"),
@@ -110,24 +113,31 @@ var turbo_flash_t: float = 0.0
 var coin_punch_t: float = 0.0
 var near_miss_flash: float = 0.0
 var spark_fx: Array = [] # {pos, scale, t, duration, color} - coin pickups + near-misses
+var road_scroll: float = 0.0
 var obstacles: Array = []
 var coins_list: Array = []
+var turbo_pickups: Array = []
 var obstacle_timer: float = 0.0
 var coin_timer: float = 0.0
+var turbo_spawn_timer: float = 0.0
 
 var elapsed_t: float = 0.0
 var lane_change_lock_until: int = 0
 var combo_popup_timer: float = 0.0
+var vignette_tex: GradientTexture2D
+var cloud_seeds: Array = []
+var rock_seeds: Array = []
+var audio_controller
 
 # ---------- HUD refs ----------
 @onready var timer_label: Label = $HUD/Root/TimerPanel/TimerLabel
 @onready var coin_label: Label = $HUD/Root/CoinPanel/CoinLabel
-@onready var combo_panel: Control = $HUD/Root/ComboPanel
 @onready var combo_label: Label = $HUD/Root/ComboPanel/ComboLabel
 @onready var progress_track: Control = $HUD/Root/ProgressTrack
 @onready var player_marker: TextureRect = $HUD/Root/ProgressTrack/PlayerMarker
 @onready var turbo_gauge_track: Control = $HUD/Root/TurboGaugeTrack
 @onready var turbo_segments: Control = $HUD/Root/TurboGaugeTrack/TurboSegments
+@onready var turbo_banner: Label = $HUD/Root/TurboBanner
 @onready var combo_popup: Label = $HUD/Root/ComboPopup
 @onready var btn_left: TextureButton = $HUD/Root/BtnLeft
 @onready var btn_right: TextureButton = $HUD/Root/BtnRight
@@ -140,10 +150,15 @@ var combo_popup_timer: float = 0.0
 
 func _ready() -> void:
 	randomize()
+	audio_controller = AUDIO_CONTROLLER_SCRIPT.new()
+	audio_controller.name = "AudioController"
+	add_child(audio_controller)
+	_build_vignette_texture()
+	_build_scenery_seeds()
 	_build_turbo_segments()
 	btn_left.pressed.connect(func(): try_swerve(-1))
 	btn_right.pressed.connect(func(): try_swerve(1))
-	overlay_button.pressed.connect(func(): reset_game())
+	overlay_button.pressed.connect(func(): reset_game(true))
 	set_process_unhandled_key_input(true)
 
 
@@ -151,7 +166,7 @@ func _build_turbo_segments() -> void:
 	for child in turbo_segments.get_children():
 		child.queue_free()
 	const SEGMENT_COUNT := 12
-	const SEGMENT_WIDTH := 15.0
+	const SEGMENT_WIDTH := 19.0
 	const SEGMENT_GAP := 3.0
 	for i in range(SEGMENT_COUNT):
 		var segment := TextureRect.new()
@@ -164,28 +179,41 @@ func _build_turbo_segments() -> void:
 		turbo_segments.add_child(segment)
 
 
+func _build_scenery_seeds() -> void:
+	for i in range(5):
+		cloud_seeds.append({
+			"x": randf(), "y": 0.15 + randf() * 0.55, "scale": 0.6 + randf() * 0.8,
+		})
+	for i in range(6):
+		rock_seeds.append({
+			"side": -1 if i % 2 == 0 else 1,
+			"x": 0.55 + randf() * 0.4, "scale": 0.5 + randf() * 0.9,
+		})
+
+
+func _build_vignette_texture() -> void:
+	var grad := Gradient.new()
+	grad.set_color(0, Color(1.0, 0.47, 0.0, 0.0))
+	grad.set_color(1, Color(1.0, 0.35, 0.0, 1.0))
+	var tex := GradientTexture2D.new()
+	tex.gradient = grad
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.6)
+	tex.fill_to = Vector2(1.0, 0.6)
+	tex.width = 256
+	tex.height = 256
+	vignette_tex = tex
+
+
 # ---------- Perspective helpers (mirror the JS lane/road math exactly) ----------
-# ROAD_VANISH_Y_FRAC/ROAD_WIDTH_SLOPE were measured directly off the approved
-# reference screenshot's road (higher, tighter vanishing point and a
-# steeper widening rate than assets/environment/guardrails.png was drawn
-# against). GUARDRAIL_Y0_FRAC/GUARDRAIL_H_FRAC re-project that fixed,
-# pre-rendered guardrail art onto the new geometry - the art's own
-# perspective can't change, so instead it's drawn into a taller, higher
-# rect that makes its baked vanishing point and taper rate land in the
-# same place the new road math puts them.
 func get_w() -> float:
 	return get_viewport_rect().size.x
 
 func get_h() -> float:
 	return get_viewport_rect().size.y
 
-const ROAD_VANISH_Y_FRAC := 0.023
-const ROAD_WIDTH_SLOPE := 0.653
-const GUARDRAIL_Y0_FRAC := -0.0292
-const GUARDRAIL_H_FRAC := 0.9158
-
 func horizon_y() -> float:
-	return get_h() * ROAD_VANISH_Y_FRAC
+	return get_h() * 0.14
 
 func player_row_y() -> float:
 	return get_h() * 0.80
@@ -196,14 +224,10 @@ func center_x() -> float:
 func ease_p(p: float) -> float:
 	return pow(clampf(p, 0.0, 2.0), 1.35)
 
-# The one and only definition of how wide the road is at a given screen
-# row - used for drawing the road surface AND for placing every object on
-# it, so the two can never drift apart again.
-func road_half_width(y: float) -> float:
-	return maxf(0.0, ROAD_WIDTH_SLOPE * get_w() * (y - horizon_y()) / get_h())
-
 func half_width_at(p: float) -> float:
-	return road_half_width(row_y(p))
+	var top_half := get_w() * 0.095
+	var bot_half := get_w() * 0.50
+	return lerp(top_half, bot_half, ease_p(p))
 
 func lane_fraction(lane_index: float) -> float:
 	var lo := clampi(int(floor(lane_index)), 0, LANES - 1)
@@ -221,7 +245,7 @@ func scale_at(p: float) -> float:
 
 
 # ---------- Game state ----------
-func reset_game() -> void:
+func reset_game(play_ui_tap: bool = false) -> void:
 	state = State.PLAYING
 	time = 0.0
 	distance = 0.0
@@ -246,11 +270,15 @@ func reset_game() -> void:
 	near_miss_flash = 0.0
 	spark_fx.clear()
 	position = Vector2.ZERO
+	road_scroll = 0.0
 	obstacles.clear()
 	coins_list.clear()
+	turbo_pickups.clear()
 	obstacle_timer = 0.6
 	coin_timer = 0.9
+	turbo_spawn_timer = randf_range(TURBO_SPAWN_MIN, TURBO_SPAWN_MAX)
 	overlay.visible = false
+	audio_controller.begin_race(play_ui_tap)
 
 
 func base_speed() -> float:
@@ -296,6 +324,7 @@ func try_swerve(dir: int) -> void:
 	lane_anim_from = player_lane_visual
 	player_lane = target
 	lane_anim_t = 0.0
+	audio_controller.lane_changed()
 
 
 func _check_near_miss_on_leave(from_lane: int) -> void:
@@ -375,6 +404,33 @@ func _spawn_coins() -> void:
 		coins_list.append({"lane": lane, "p": -i * 0.06, "collected": false})
 
 
+func _spawn_turbo_pickup() -> void:
+	# Lane indices keep pickups centered using the live lane geometry.
+	var lane := randi() % LANES
+	turbo_pickups.append({"lane": lane, "p": 0.0, "collected": false})
+
+
+func _activate_timed_turbo() -> void:
+	var was_active := is_turbo
+	turbo_gauge = TURBO_GAUGE_MAX
+	is_turbo = true
+	invincible = true
+	popup_combo("TURBO! %.1fs" % TURBO_DURATION, Color(1.0, 0.478, 0.102))
+	audio_controller.turbo_charged()
+	if not was_active:
+		turbo_ring_t = TURBO_RING_DURATION
+		turbo_flash_t = TURBO_FLASH_DURATION
+		audio_controller.set_turbo(true)
+
+
+func _deactivate_turbo(clear_gauge: bool = true) -> void:
+	is_turbo = false
+	invincible = false
+	if clear_gauge:
+		turbo_gauge = 0.0
+	audio_controller.set_turbo(false)
+
+
 # ---------- Update ----------
 func _process(delta: float) -> void:
 	elapsed_t += delta
@@ -401,19 +457,18 @@ func _update_game(dt: float) -> void:
 	if is_turbo:
 		turbo_gauge = maxf(0.0, turbo_gauge - TURBO_DRAIN_PER_SEC * dt)
 		if turbo_gauge <= 0.0:
-			is_turbo = false
-			invincible = false
-			turbo_gauge = 0.0
+			_deactivate_turbo()
 
 	var speed := current_speed()
 	distance += speed * dt
 	var dp: float = (speed / ROAD_LENGTH) * dt
+	road_scroll += speed * dt
 
 	# Obstacles: position always advances, even once resolved (hit or
 	# passed) - otherwise a resolved car freezes in place forever instead
 	# of continuing off-screen and becoming eligible for removal.
 	for o in obstacles:
-		o["p"] += dp * (TRAFFIC_SPEED_MULT if o["kind"] == "traffic" else 1.0)
+		o["p"] += dp
 		if o["resolved"]:
 			continue
 
@@ -431,6 +486,7 @@ func _update_game(dt: float) -> void:
 				hit_flash = 0.25
 				shake_t = SHAKE_DURATION
 				popup_combo("HIT!", Color(1.0, 0.3, 0.3))
+				audio_controller.collision(o["kind"] == "hazard")
 		elif o["p"] >= PASS_AT:
 			o["resolved"] = true
 			if o["dodged"] or o["was_near"]:
@@ -439,8 +495,8 @@ func _update_game(dt: float) -> void:
 				best_combo = maxi(best_combo, combo)
 				near_miss_flash = NEAR_MISS_FLASH_DURATION
 				_spawn_spark(Vector2(lane_x(o["lane"], o["p"]), row_y(o["p"])), scale_at(o["p"]), NEAR_MISS_FX_DURATION, NEAR_MISS_SPARK_COLOR)
-				if not is_turbo:
-					popup_combo("NICE! x%d" % combo, Color(0.208, 0.878, 0.631))
+				popup_combo("NICE! x%d" % combo, Color(0.208, 0.878, 0.631))
+				audio_controller.combo_increased()
 
 	obstacles = obstacles.filter(func(o): return o["p"] < REMOVE_AT)
 
@@ -453,16 +509,19 @@ func _update_game(dt: float) -> void:
 			coins += 1
 			coin_punch_t = COIN_PUNCH_DURATION
 			_spawn_spark(Vector2(lane_x(c["lane"], c["p"]), row_y(c["p"])), scale_at(c["p"]), COIN_PICKUP_FX_DURATION, COIN_SPARK_COLOR)
-			if not is_turbo:
-				turbo_gauge = minf(TURBO_GAUGE_MAX, turbo_gauge + TURBO_GAIN_PER_COIN)
-				if turbo_gauge >= TURBO_GAUGE_MAX:
-					is_turbo = true
-					invincible = true
-					turbo_ring_t = TURBO_RING_DURATION
-					turbo_flash_t = TURBO_FLASH_DURATION
-					popup_combo("TURBO!", Color(1.0, 0.478, 0.102))
+			audio_controller.coin_collected()
 
 	coins_list = coins_list.filter(func(c): return not c["collected"] and c["p"] < REMOVE_AT)
+
+	for pickup in turbo_pickups:
+		if pickup["collected"]:
+			continue
+		pickup["p"] += dp
+		if pickup["lane"] == player_lane and pickup["p"] >= DANGER_ZONE_START and pickup["p"] < COLLIDE_AT + 0.05:
+			pickup["collected"] = true
+			_activate_timed_turbo()
+
+	turbo_pickups = turbo_pickups.filter(func(pickup): return not pickup["collected"] and pickup["p"] < REMOVE_AT)
 
 	obstacle_timer -= dt
 	if obstacle_timer <= 0.0:
@@ -483,6 +542,11 @@ func _update_game(dt: float) -> void:
 	if coin_timer <= 0.0:
 		_spawn_coins()
 		coin_timer = 1.6 + randf() * 1.2
+
+	turbo_spawn_timer -= dt
+	if turbo_spawn_timer <= 0.0:
+		_spawn_turbo_pickup()
+		turbo_spawn_timer = randf_range(TURBO_SPAWN_MIN, TURBO_SPAWN_MAX)
 
 	if hit_flash > 0.0:
 		hit_flash = maxf(0.0, hit_flash - dt)
@@ -520,9 +584,15 @@ func _update_game(dt: float) -> void:
 	if distance >= FINISH_DISTANCE:
 		state = State.WIN
 		win_flash = 0.5
+		_deactivate_turbo()
+		turbo_pickups.clear()
+		audio_controller.finish_race(true)
 		_show_end_screen(true)
 	elif time >= RACE_TIME:
 		state = State.LOSE
+		_deactivate_turbo()
+		turbo_pickups.clear()
+		audio_controller.finish_race(false)
 		_show_end_screen(false)
 
 
@@ -539,23 +609,17 @@ func _show_end_screen(won: bool) -> void:
 
 
 # ---------- HUD ----------
-const TIMER_GRADIENT_NORMAL: Array[Color] = [Color(1, 1, 1), Color(0.9315, 0.961, 1), Color(0.863, 0.922, 1)]
-const TIMER_GRADIENT_URGENT: Array[Color] = [Color8(0xff, 0x4d, 0x4d), Color8(0xff, 0x73, 0x83), Color8(0xff, 0x9a, 0x66)]
-
 func _update_hud() -> void:
 	var remaining: float = maxf(0.0, RACE_TIME - time)
+	if state == State.PLAYING:
+		audio_controller.update_countdown(remaining)
 	timer_label.text = "%.1f" % remaining
-	var timer_mat := timer_label.material as ShaderMaterial
-	var timer_grad := TIMER_GRADIENT_URGENT if remaining < 10.0 else TIMER_GRADIENT_NORMAL
-	timer_mat.set_shader_parameter("color_top", timer_grad[0])
-	timer_mat.set_shader_parameter("color_mid", timer_grad[1])
-	timer_mat.set_shader_parameter("color_bottom", timer_grad[2])
+	timer_label.modulate = Color8(0xff, 0x4d, 0x4d) if remaining < 10.0 else Color8(0xff, 0xcc, 0x33)
 	coin_label.text = "%d" % coins
 	coin_label.pivot_offset = coin_label.size * 0.5
 	var coin_punch_frac: float = coin_punch_t / COIN_PUNCH_DURATION
 	coin_label.scale = Vector2.ONE * (1.0 + (COIN_PUNCH_SCALE - 1.0) * coin_punch_frac)
-	combo_label.text = "%dx" % combo
-	combo_panel.visible = combo > 0
+	combo_label.text = "%dx" % maxi(1, combo)
 
 	var pct: float = clampf(distance / FINISH_DISTANCE, 0.0, 1.0)
 	var track_w: float = progress_track.size.x
@@ -568,28 +632,19 @@ func _update_hud() -> void:
 	for i in range(turbo_segments.get_child_count()):
 		var segment := turbo_segments.get_child(i) as TextureRect
 		if i < lit_count:
-			segment.modulate = _turbo_segment_color(i)
+			var color_t := float(i) / float(maxi(1, turbo_segments.get_child_count() - 1))
+			segment.modulate = Color(1.0, lerpf(0.12, 0.95, color_t), 0.05, 1.0)
 		else:
 			segment.modulate = Color(0.12, 0.16, 0.22, 0.55)
-
-
-# Segments 1-3 red, 4-7 orange, 8-10 amber, 11-12 yellow - an approved
-# stepped color progression rather than a smooth per-segment gradient.
-func _turbo_segment_color(i: int) -> Color:
-	if i < 3:
-		return Color8(0xff, 0x24, 0x18)
-	elif i < 7:
-		return Color8(0xff, 0x78, 0x00)
-	elif i < 10:
-		return Color8(0xff, 0xc4, 0x00)
-	else:
-		return Color8(0xff, 0xf2, 0x00)
+	turbo_banner.visible = is_turbo
+	if is_turbo:
+		var glow: float = 0.8 + 0.2 * sin(elapsed_t * 8.0)
+		turbo_banner.modulate = Color(glow, glow, glow, 1.0)
 
 
 # ---------- Rendering ----------
 func _draw() -> void:
 	_draw_road()
-
 	if is_turbo:
 		_draw_speed_lines(elapsed_t)
 
@@ -602,6 +657,10 @@ func _draw() -> void:
 		if c["p"] < -0.1:
 			continue
 		draw_items.append({"p": c["p"], "cb": func(): _draw_coin(Vector2(lane_x(c["lane"], c["p"]), row_y(c["p"])), scale_at(c["p"]))})
+	for pickup in turbo_pickups:
+		if pickup["p"] < -0.1:
+			continue
+		draw_items.append({"p": pickup["p"], "cb": func(): _draw_turbo_pickup(pickup)})
 	for o in obstacles:
 		draw_items.append({"p": o["p"], "cb": func(): _draw_obstacle(o)})
 
@@ -612,13 +671,13 @@ func _draw() -> void:
 
 	var px := lane_x(player_lane_visual, 1.0)
 	var py := player_row_y()
-	var p_scale := scale_at(1.0) * 1.05 * 1.2
+	var p_scale := scale_at(1.0) * 1.05
 	var turbo_now := is_turbo
 	var t_now := elapsed_t
 	draw_items.append({"p": 1.001, "cb": func():
 		if turbo_now:
 			_draw_flame_trail(Vector2(px, py), p_scale, t_now)
-		_draw_sprite_toward_vanishing_point(TEX_PLAYER, Vector2(px, py), p_scale)
+		_draw_sprite_centered(TEX_PLAYER, Vector2(px, py), p_scale)
 	})
 
 	draw_items.sort_custom(func(a, b): return a["p"] < b["p"])
@@ -640,6 +699,10 @@ func _draw() -> void:
 		draw_rect(Rect2(Vector2.ZERO, sz), Color(0.208, 0.878, 0.631, near_miss_flash / NEAR_MISS_FLASH_DURATION * 0.14))
 	if win_flash > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, sz), Color(1, 1, 1, win_flash * 0.6))
+	if is_turbo:
+		var pulse: float = 0.5 + 0.5 * sin(elapsed_t * 8.0)
+		draw_rect(Rect2(Vector2.ZERO, sz), Color(1.0, 0.549, 0.078, 0.08 + pulse * 0.05))
+		draw_texture_rect(vignette_tex, Rect2(Vector2.ZERO, sz), false, Color(1, 1, 1, 0.35 + pulse * 0.25))
 
 
 func _draw_vgrad(rect: Rect2, c_top: Color, c_bottom: Color, steps: int = 16) -> void:
@@ -650,10 +713,7 @@ func _draw_vgrad(rect: Rect2, c_top: Color, c_bottom: Color, steps: int = 16) ->
 		draw_rect(Rect2(rect.position.x, rect.position.y + i * step_h, rect.size.x, step_h + 1.0), col)
 
 
-# p1 is the far (horizon) end and p2 is the near (player) end - each dash
-# fades from alpha_far up to alpha_near so the lines don't compete for
-# attention far up the road, matching the vanishing guardrails/road shading.
-func _draw_dashed_line(p1: Vector2, p2: Vector2, color: Color, width: float, dash: float, gap: float, offset: float, alpha_far: float, alpha_near: float) -> void:
+func _draw_dashed_line(p1: Vector2, p2: Vector2, color: Color, width: float, dash: float, gap: float, offset: float) -> void:
 	var dir: Vector2 = p2 - p1
 	var length := dir.length()
 	if length <= 0.0:
@@ -667,18 +727,9 @@ func _draw_dashed_line(p1: Vector2, p2: Vector2, color: Color, width: float, das
 		var seg_start: float = maxf(pos, 0.0)
 		var seg_end: float = minf(pos + dash, length)
 		if seg_end > seg_start:
-			var t: float = ((seg_start + seg_end) * 0.5) / length
-			var seg_color := color
-			seg_color.a = color.a * lerpf(alpha_far, alpha_near, t)
-			draw_line(p1 + dir * seg_start, p1 + dir * seg_end, seg_color, width)
+			draw_line(p1 + dir * seg_start, p1 + dir * seg_end, color, width)
 		pos += pattern
 
-
-const ROAD_COLOR_FAR := Color8(0x45, 0x4b, 0x5c)
-const ROAD_COLOR_NEAR := Color8(0x23, 0x25, 0x2f)
-const ROAD_CROWN_INSET := 0.7
-const ROAD_CROWN_COLOR := Color(1, 1, 1, 0.06)
-const ROAD_GRADIENT_STEPS := 28
 
 func _draw_road() -> void:
 	var w := get_w()
@@ -688,66 +739,37 @@ func _draw_road() -> void:
 
 	draw_texture_rect(TEX_BACKGROUND, Rect2(0, 0, w, h), false)
 
-	# The road surface is drawn from the true vanishing point (0 width) all
-	# the way to the bottom of the screen, one thin trapezoid strip at a
-	# time, so the width at every row is exactly road_half_width(y) - the
-	# same function guardrails.png was measured against and that every car
-	# and coin is placed with. That keeps the asphalt's edge glued to the
-	# guardrail art with no gap, and gives a smooth shading gradient instead
-	# of two flat, mismatched polygons stacked on each other.
-	for i in range(ROAD_GRADIENT_STEPS):
-		var y0: float = lerp(hy, h, float(i) / ROAD_GRADIENT_STEPS)
-		var y1: float = lerp(hy, h, float(i + 1) / ROAD_GRADIENT_STEPS)
-		var hw0 := road_half_width(y0)
-		var hw1 := road_half_width(y1)
-		var col: Color = ROAD_COLOR_FAR.lerp(ROAD_COLOR_NEAR, float(i + 1) / ROAD_GRADIENT_STEPS)
-		draw_colored_polygon(PackedVector2Array([
-			Vector2(cx - hw0, y0), Vector2(cx + hw0, y0),
-			Vector2(cx + hw1, y1), Vector2(cx - hw1, y1),
-		]), col)
+	var top_half := half_width_at(0.0)
+	var bot_half := half_width_at(1.0)
 
-	# Subtle crowned-centerline highlight: a second trapezoid sharing the
-	# exact same vanishing point, just narrower, so it nests inside the
-	# road surface instead of drifting off at a different angle.
-	draw_colored_polygon(PackedVector2Array([
-		Vector2(cx, hy), Vector2(cx, hy),
-		Vector2(cx + road_half_width(h) * ROAD_CROWN_INSET, h),
-		Vector2(cx - road_half_width(h) * ROAD_CROWN_INSET, h),
-	]), ROAD_CROWN_COLOR)
+	# Road surface: dark base + a lighter center band for a subtle
+	# crowned-asphalt look instead of one flat fill.
+	var poly := PackedVector2Array([
+		Vector2(cx - top_half, hy), Vector2(cx + top_half, hy),
+		Vector2(cx + bot_half, h), Vector2(cx - bot_half, h),
+	])
+	draw_colored_polygon(poly, Color8(0x2c, 0x30, 0x3d))
+	var inset := 0.72
+	var poly_hi := PackedVector2Array([
+		Vector2(cx - top_half * inset, hy), Vector2(cx + top_half * inset, hy),
+		Vector2(cx + bot_half * inset, h), Vector2(cx - bot_half * inset, h),
+	])
+	draw_colored_polygon(poly_hi, Color(0.28, 0.31, 0.4, 0.55))
 
 	for i in range(1, LANES):
 		var frac := LANE_EDGES[i]
-		var x0: float = cx + frac * road_half_width(hy)
-		var x1: float = cx + frac * road_half_width(h)
-		_draw_dashed_line(Vector2(x0, hy), Vector2(x1, h), Color(1, 1, 1, 0.88), 4.0, 30.0, 34.0, 0.0, 0.08, 1.0)
+		var x0: float = cx + frac * half_width_at(0.0)
+		var x1: float = cx + frac * half_width_at(1.0)
+		_draw_dashed_line(Vector2(x0, hy), Vector2(x1, h), Color(1, 1, 1, 0.88), 4.0, 16.0, 15.0, fmod(road_scroll, 31.0))
 
-	draw_line(Vector2(cx, hy), Vector2(cx - road_half_width(h), h), Color.WHITE, 4.0)
-	draw_line(Vector2(cx, hy), Vector2(cx + road_half_width(h), h), Color.WHITE, 4.0)
-	draw_texture_rect(TEX_GUARDRAILS, Rect2(0, h * GUARDRAIL_Y0_FRAC, w, h * GUARDRAIL_H_FRAC), false)
+	draw_line(Vector2(cx - top_half, hy), Vector2(cx - bot_half, h), Color.WHITE, 4.0)
+	draw_line(Vector2(cx + top_half, hy), Vector2(cx + bot_half, h), Color.WHITE, 4.0)
+	draw_texture_rect(TEX_GUARDRAILS, Rect2(0, 0, w, h), false)
 
 
 func _draw_sprite_centered(texture: Texture2D, pos: Vector2, scale: float) -> void:
 	var size := texture.get_size() * scale
 	draw_texture_rect(texture, Rect2(pos - size * 0.5, size), false)
-
-
-# Lane divider lines all radiate outward from the road's vanishing point
-# (which sits right behind the timer badge) - that radiating line is the
-# lane itself, so a car actually driving down it would be angled to match
-# exactly. For the player's car (closest to camera, most prominent) the
-# full geometric angle reads as a banked/sloped road once you factor in a
-# rigid car body, so it's heavily damped to a subtle lean; traffic further
-# away uses the true, undamped angle so it stays parallel to its lane.
-const SPRITE_TILT_DAMPING := 0.3
-
-func _draw_sprite_toward_vanishing_point(texture: Texture2D, pos: Vector2, scale: float, damping: float = SPRITE_TILT_DAMPING) -> void:
-	var size := texture.get_size() * scale
-	var dx := pos.x - center_x()
-	var dy := pos.y - horizon_y()
-	var angle := (atan2(-dx, dy) if dy > 0.0 else 0.0) * damping
-	draw_set_transform(pos, angle, Vector2.ONE)
-	draw_texture_rect(texture, Rect2(-size * 0.5, size), false)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 func _draw_obstacle(obstacle: Dictionary) -> void:
@@ -757,7 +779,120 @@ func _draw_obstacle(obstacle: Dictionary) -> void:
 	if obstacle["kind"] == "hazard":
 		_draw_sprite_centered(HAZARD_TEXTURES[obstacle["variant"]], pos, visual_scale)
 	else:
-		_draw_sprite_toward_vanishing_point(TRAFFIC_TEXTURES[obstacle["variant"]], pos, visual_scale * 0.82 * 1.3, 1.0)
+		_draw_sprite_centered(TRAFFIC_TEXTURES[obstacle["variant"]], pos, visual_scale * 0.82)
+
+
+func _draw_sky(w: float, hy: float) -> void:
+	_draw_vgrad(Rect2(0, 0, w, hy), Color8(0x5e, 0xc8, 0xea), Color8(0xbf, 0xe9, 0xf5))
+	for seed in cloud_seeds:
+		var drift: float = fmod(seed["x"] * w + elapsed_t * 6.0, w + 160.0) - 80.0
+		var cy: float = hy * seed["y"]
+		var s: float = seed["scale"]
+		_draw_cloud(Vector2(drift, cy), s)
+
+
+func _draw_cloud(pos: Vector2, s: float) -> void:
+	var col := Color(1, 1, 1, 0.9)
+	draw_circle(pos, 16.0 * s, col)
+	draw_circle(pos + Vector2(16.0 * s, 3.0 * s), 12.0 * s, col)
+	draw_circle(pos + Vector2(-15.0 * s, 4.0 * s), 11.0 * s, col)
+	draw_circle(pos + Vector2(4.0 * s, -6.0 * s), 10.0 * s, col)
+
+
+func _draw_scenery(w: float, h: float, hy: float, cx: float) -> void:
+	# Ocean band beyond the road on both sides, from the horizon down.
+	_draw_vgrad(Rect2(0, hy, w, h - hy), Color8(0x1f, 0xa8, 0xc9), Color8(0x0d, 0x6f, 0x8c))
+	for i in range(10):
+		var yy: float = hy + (h - hy) * (float(i) / 10.0)
+		var wobble: float = sin(elapsed_t * 1.5 + i) * 4.0
+		draw_line(Vector2(0, yy + wobble), Vector2(w, yy - wobble), Color(1, 1, 1, 0.10), 2.0)
+
+	for seed in rock_seeds:
+		var side: float = seed["side"]
+		var s: float = seed["scale"]
+		var rx: float = cx + side * w * seed["x"]
+		var ry: float = hy - 2.0
+		var pts := PackedVector2Array([
+			Vector2(rx - 22.0 * s, ry), Vector2(rx - 6.0 * s, ry - 30.0 * s),
+			Vector2(rx + 10.0 * s, ry - 14.0 * s), Vector2(rx + 24.0 * s, ry),
+		])
+		draw_colored_polygon(pts, Color8(0x6b, 0x53, 0x3c))
+
+
+func _draw_guardrail(cx: float, hy: float, h: float, top_half: float, bot_half: float, side: float) -> void:
+	var rail_w_top := 5.0
+	var rail_w_bot := 16.0
+	var inner_top: float = top_half * side
+	var inner_bot: float = bot_half * side
+	var outer_top: float = inner_top + side * rail_w_top
+	var outer_bot: float = inner_bot + side * rail_w_bot
+	var poly := PackedVector2Array([
+		Vector2(cx + inner_top, hy), Vector2(cx + outer_top, hy),
+		Vector2(cx + outer_bot, h), Vector2(cx + inner_bot, h),
+	])
+	draw_colored_polygon(poly, Color8(0xd8, 0xdf, 0xe6))
+
+	var steps := 10
+	for i in range(steps):
+		var p0: float = float(i) / steps
+		var p1: float = float(i + 1) / steps
+		if i % 2 != 0:
+			continue
+		var s0 := scale_at(p0)
+		var y0 := row_y(p0)
+		var hw0: float = half_width_at(p0) * side + side * lerp(rail_w_top, rail_w_bot, ease_p(p0)) * 0.5
+		var post_w: float = maxf(2.0, 4.0 * s0)
+		var post_h: float = maxf(4.0, 10.0 * s0)
+		draw_rect(Rect2(cx + hw0 - post_w * 0.5, y0 - post_h, post_w, post_h), Color8(0xc0, 0x2c, 0x46))
+
+
+func _ellipse_points(center: Vector2, rx: float, ry: float, segments: int = 16) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for i in range(segments):
+		var a: float = (float(i) / segments) * TAU
+		pts.append(center + Vector2(cos(a) * rx, sin(a) * ry))
+	return pts
+
+
+func _draw_round_rect(rect: Rect2, color: Color, radius: float) -> void:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = color
+	sb.corner_radius_top_left = int(radius)
+	sb.corner_radius_top_right = int(radius)
+	sb.corner_radius_bottom_left = int(radius)
+	sb.corner_radius_bottom_right = int(radius)
+	draw_style_box(sb, rect)
+
+
+func _draw_car(pos: Vector2, scale: float, color: Color) -> void:
+	var w: float = 46.0 * scale
+	var h: float = 74.0 * scale
+	draw_set_transform(pos, 0.0, Vector2.ONE)
+
+	draw_colored_polygon(_ellipse_points(Vector2(0, h * 0.44), w * 0.58, h * 0.15), Color(0, 0, 0, 0.38))
+
+	# Base coat, then a darker lower half for body-side shading and a
+	# bright top-down specular streak, so the paint reads as glossy
+	# rather than a single flat fill.
+	_draw_round_rect(Rect2(-w / 2.0, -h / 2.0, w, h), color, w * 0.28)
+	var shade := color.darkened(0.35)
+	shade.a = 0.55
+	_draw_round_rect(Rect2(-w / 2.0, h * 0.05, w, h * 0.45), shade, w * 0.24)
+	var gloss_pts := PackedVector2Array([
+		Vector2(-w * 0.16, -h / 2.0 + h * 0.05), Vector2(w * 0.10, -h / 2.0 + h * 0.05),
+		Vector2(w * 0.04, h / 2.0 - h * 0.08), Vector2(-w * 0.10, h / 2.0 - h * 0.08),
+	])
+	draw_colored_polygon(gloss_pts, Color(1, 1, 1, 0.22))
+
+	_draw_round_rect(Rect2(-w / 2.0 + w * 0.14, -h / 2.0 + h * 0.18, w * 0.72, h * 0.32), Color(0.55, 0.75, 0.92, 0.9), w * 0.16)
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(-w / 2.0 + w * 0.16, -h / 2.0 + h * 0.19), Vector2(-w / 2.0 + w * 0.4, -h / 2.0 + h * 0.19),
+		Vector2(-w / 2.0 + w * 0.28, -h / 2.0 + h * 0.46), Vector2(-w / 2.0 + w * 0.16, -h / 2.0 + h * 0.46),
+	]), Color(1, 1, 1, 0.5))
+
+	draw_rect(Rect2(-w / 2.0 + w * 0.08, -h / 2.0 - 2.0, w * 0.18, 5.0 * scale), Color8(0xff, 0xe0, 0x66))
+	draw_rect(Rect2(w / 2.0 - w * 0.26, -h / 2.0 - 2.0, w * 0.18, 5.0 * scale), Color8(0xff, 0xe0, 0x66))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 func _draw_coin(pos: Vector2, scale: float) -> void:
@@ -777,6 +912,14 @@ func _draw_spark_fx(fx: Dictionary) -> void:
 	var col: Color = fx["color"]
 	col.a = alpha * 0.9
 	draw_arc(fx["pos"], radius, 0.0, TAU, 20, col, 3.0 * fx["scale"], true)
+
+
+func _draw_turbo_pickup(pickup: Dictionary) -> void:
+	var p: float = pickup["p"]
+	var pos := Vector2(lane_x(pickup["lane"], p), row_y(p))
+	var pulse := 0.92 + 0.08 * sin(elapsed_t * 7.0 + p * 4.0)
+	var visual_scale := scale_at(p) * 0.30 * pulse
+	_draw_sprite_centered(TEX_TURBO_PICKUP, pos, visual_scale)
 
 
 func _draw_finish_tape(p: float) -> void:
@@ -809,6 +952,7 @@ func _draw_finish_tape(p: float) -> void:
 # one image) anchored just behind the player's rear, scaled off the car's
 # own perspective scale so it shrinks/grows with the car.
 const FLAME_TEX_SCALE := 0.34
+
 
 func _draw_flame_trail(pos: Vector2, scale: float, t: float) -> void:
 	var flicker: float = 0.82 + 0.18 * sin(t * 30.0)

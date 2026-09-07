@@ -177,6 +177,24 @@ theme_override_constants/outline_size = 6
 horizontal_alignment = 1
 visible = false
 
+[node name="TurboBanner" type="Label" parent="HUD/Root"]
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -200.0
+offset_top = 134.0
+offset_right = 200.0
+offset_bottom = 180.0
+theme_override_fonts/font = SubResource("FontVariation_extrabold")
+theme_override_font_sizes/font_size = 34
+theme_override_colors/font_color = Color(1, 0.549, 0.078, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 8
+text = "TURBO!"
+horizontal_alignment = 1
+vertical_alignment = 1
+visible = false
+mouse_filter = 2
+
 [node name="TurboGaugeTrack" type="Control" parent="HUD/Root"]
 anchor_left = 0.5
 anchor_top = 1.0
