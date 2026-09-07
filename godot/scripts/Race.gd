@@ -632,8 +632,13 @@ func _update_hud() -> void:
 
 	var pct: float = clampf(distance / FINISH_DISTANCE, 0.0, 1.0)
 	var track_w: float = progress_track.size.x
+	# marker_start mirrors the track art's left inset (its leftmost opaque
+	# pixel sits ~3px in) so the marker starts flush with the track's own
+	# edge; marker_end mirrors the same inset from the right edge so the
+	# marker finishes at the checkered flag instead of undershooting to the
+	# last checkpoint dot (which sits at ~83% of the track's width).
 	var marker_start := 3.0
-	var marker_end := track_w * 0.87 - player_marker.size.x
+	var marker_end := track_w - player_marker.size.x - marker_start
 	player_marker.position.x = lerpf(marker_start, marker_end, pct)
 
 	var gauge_pct: float = turbo_gauge / TURBO_GAUGE_MAX
