@@ -99,7 +99,7 @@ var audio_controller
 @onready var player_marker: TextureRect = $HUD/Root/ProgressTrack/PlayerMarker
 @onready var turbo_gauge_track: Control = $HUD/Root/TurboGaugeTrack
 @onready var turbo_segments: Control = $HUD/Root/TurboGaugeTrack/TurboSegments
-@onready var turbo_banner: Label = $HUD/Root/TurboBanner
+@onready var turbo_banner: Label = get_node_or_null("HUD/Root/TurboBanner") as Label
 @onready var combo_popup: Label = $HUD/Root/ComboPopup
 @onready var btn_left: TextureButton = $HUD/Root/BtnLeft
 @onready var btn_right: TextureButton = $HUD/Root/BtnRight
@@ -546,8 +546,9 @@ func _update_hud() -> void:
 			segment.modulate = Color(1.0, lerpf(0.12, 0.95, color_t), 0.05, 1.0)
 		else:
 			segment.modulate = Color(0.12, 0.16, 0.22, 0.55)
-	turbo_banner.visible = is_turbo
-	if is_turbo:
+	if turbo_banner != null:
+		turbo_banner.visible = is_turbo
+	if is_turbo and turbo_banner != null:
 		var glow: float = 0.8 + 0.2 * sin(elapsed_t * 8.0)
 		turbo_banner.modulate = Color(glow, glow, glow, 1.0)
 
