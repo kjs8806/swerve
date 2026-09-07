@@ -7,15 +7,21 @@ extends Node
 const ENGINE_IDLE_DB := -16.0
 const ENGINE_DRIVE_DB := -13.0
 const ENGINE_DUCK_DB := -15.0
+const MUSIC_PLAY_DB := -9.0
+const MUSIC_TURBO_DUCK_DB := -13.0
 const TURBO_SUSTAIN_DB := -12.0
 const SILENT_DB := -60.0
 const LOOP_FADE_TIME := 0.20
+const MUSIC_FADE_IN_TIME := 0.75
+const MUSIC_FADE_OUT_TIME := 0.80
+const MUSIC_DUCK_TIME := 0.18
 const TURBO_FADE_IN_TIME := 0.10
 const TURBO_FADE_OUT_TIME := 0.15
 const LANE_SOUND_COOLDOWN_MS := 80
 const COLLISION_SOUND_COOLDOWN_MS := 350
 const ROAD_HIT_SOUND_COOLDOWN_MS := 220
 
+const STREAM_BACKGROUND_MUSIC := preload("res://assets/audio/music/coastal-velocity-loop.ogg")
 const STREAM_ENGINE_IDLE := preload("res://assets/audio/engine-idle-loop.ogg")
 const STREAM_ENGINE_DRIVE := preload("res://assets/audio/engine-drive-loop.ogg")
 const STREAM_LANE_CHANGE := preload("res://assets/audio/lane-change-whoosh.wav")
@@ -32,11 +38,13 @@ const STREAM_RACE_START := preload("res://assets/audio/race-start.wav")
 const STREAM_FINISH_WIN := preload("res://assets/audio/finish-win.wav")
 const STREAM_TIME_UP := preload("res://assets/audio/time-up-failure.wav")
 
+var background_music: AudioStreamPlayer
 var engine_idle: AudioStreamPlayer
 var engine_drive: AudioStreamPlayer
 var turbo_sustain: AudioStreamPlayer
 var sfx_players: Dictionary = {}
 var engine_fade: Tween
+var music_fade: Tween
 var turbo_fade: Tween
 var engine_mode := "stopped"
 var turbo_active := false
@@ -47,9 +55,11 @@ var last_countdown_second := -1
 
 
 func _ready() -> void:
+	background_music = _make_player("BackgroundMusic", STREAM_BACKGROUND_MUSIC, SILENT_DB)
 	engine_idle = _make_player("EngineIdle", STREAM_ENGINE_IDLE, ENGINE_IDLE_DB)
 	engine_drive = _make_player("EngineDrive", STREAM_ENGINE_DRIVE, SILENT_DB)
 	turbo_sustain = _make_player("TurboSustain", STREAM_TURBO_SUSTAIN, SILENT_DB)
+	_set_loop(STREAM_BACKGROUND_MUSIC, true)
 	_set_loop(STREAM_ENGINE_IDLE, true)
 	_set_loop(STREAM_ENGINE_DRIVE, true)
 	_set_loop(STREAM_TURBO_SUSTAIN, true)
@@ -107,6 +117,37 @@ func _replace_engine_fade() -> Tween:
 	return engine_fade
 
 
+func _replace_music_fade() -> Tween:
+	if music_fade != null and music_fade.is_valid():
+		music_fade.kill()
+	music_fade = create_tween()
+	return music_fade
+
+
+func start_background_music() -> void:
+	var fade := _replace_music_fade()
+	if not background_music.playing:
+		background_music.volume_db = SILENT_DB
+		background_music.play()
+	fade.tween_property(background_music, "volume_db", MUSIC_PLAY_DB, MUSIC_FADE_IN_TIME)
+
+
+func stop_background_music() -> void:
+	if not background_music.playing:
+		return
+	var fade := _replace_music_fade()
+	fade.tween_property(background_music, "volume_db", SILENT_DB, MUSIC_FADE_OUT_TIME)
+	fade.tween_callback(func(): background_music.stop())
+
+
+func _set_music_turbo_duck(active: bool) -> void:
+	if not background_music.playing:
+		return
+	var fade := _replace_music_fade()
+	var target_db := MUSIC_TURBO_DUCK_DB if active else MUSIC_PLAY_DB
+	fade.tween_property(background_music, "volume_db", target_db, MUSIC_DUCK_TIME)
+
+
 func set_engine_idle() -> void:
 	if engine_mode == "idle":
 		return
@@ -150,6 +191,7 @@ func begin_race(play_ui_tap: bool) -> void:
 	if play_ui_tap:
 		_play("ui_tap")
 	_play("race_start")
+	start_background_music()
 	set_engine_driving()
 
 
@@ -190,6 +232,7 @@ func set_turbo(active: bool) -> void:
 	if active == turbo_active:
 		return
 	turbo_active = active
+	_set_music_turbo_duck(active)
 	if turbo_fade != null and turbo_fade.is_valid():
 		turbo_fade.kill()
 	turbo_fade = create_tween()
@@ -217,5 +260,6 @@ func update_countdown(remaining: float) -> void:
 
 func finish_race(won: bool) -> void:
 	set_turbo(false)
+	stop_background_music()
 	stop_engine()
 	_play("finish_win" if won else "time_up")
