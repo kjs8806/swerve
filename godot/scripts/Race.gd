@@ -46,10 +46,19 @@ const SPEED_LINE_ALPHA := 0.55
 const SPEED_LINE_PULSE_SPEED := 3.0
 
 # Coin pickup feedback: a quick punch on the HUD counter plus a brief
-# in-world sparkle at the exact pickup point.
+# in-world sparkle (see spark_fx below) at the exact pickup point.
 const COIN_PUNCH_DURATION := 0.18
 const COIN_PUNCH_SCALE := 1.35
 const COIN_PICKUP_FX_DURATION := 0.3
+const COIN_SPARK_COLOR := Color(1.0, 0.85, 0.3)
+
+# Near-miss feedback: same expanding-spark mechanic as a coin pickup (see
+# spark_fx below), positioned at the dodged obstacle, plus a light screen
+# tint - far more restrained than hit_flash since this rewards the player
+# rather than punishing them.
+const NEAR_MISS_FX_DURATION := 0.3
+const NEAR_MISS_SPARK_COLOR := Color(0.208, 0.878, 0.631)
+const NEAR_MISS_FLASH_DURATION := 0.18
 
 const TEX_BACKGROUND := preload("res://assets/environment/ocean-sky.png")
 const TEX_GUARDRAILS := preload("res://assets/environment/guardrails.png")
@@ -99,7 +108,8 @@ var shake_t: float = 0.0
 var turbo_ring_t: float = 0.0
 var turbo_flash_t: float = 0.0
 var coin_punch_t: float = 0.0
-var coin_pickups: Array = []
+var near_miss_flash: float = 0.0
+var spark_fx: Array = [] # {pos, scale, t, duration, color} - coin pickups + near-misses
 var obstacles: Array = []
 var coins_list: Array = []
 var obstacle_timer: float = 0.0
@@ -233,7 +243,8 @@ func reset_game() -> void:
 	turbo_ring_t = 0.0
 	turbo_flash_t = 0.0
 	coin_punch_t = 0.0
-	coin_pickups.clear()
+	near_miss_flash = 0.0
+	spark_fx.clear()
 	position = Vector2.ZERO
 	obstacles.clear()
 	coins_list.clear()
@@ -256,6 +267,10 @@ func current_speed() -> float:
 	if is_turbo:
 		mult *= TURBO_MULT
 	return base_speed() * mult
+
+
+func _spawn_spark(pos: Vector2, scale: float, duration: float, color: Color) -> void:
+	spark_fx.append({"pos": pos, "scale": scale, "t": duration, "duration": duration, "color": color})
 
 
 func popup_combo(text: String, color: Color) -> void:
@@ -404,6 +419,8 @@ func _update_game(dt: float) -> void:
 				boost_t = BOOST_TIME
 				combo += 1
 				best_combo = maxi(best_combo, combo)
+				near_miss_flash = NEAR_MISS_FLASH_DURATION
+				_spawn_spark(Vector2(lane_x(o["lane"], o["p"]), row_y(o["p"])), scale_at(o["p"]), NEAR_MISS_FX_DURATION, NEAR_MISS_SPARK_COLOR)
 				if not is_turbo:
 					popup_combo("NICE! x%d" % combo, Color(0.208, 0.878, 0.631))
 
@@ -417,11 +434,7 @@ func _update_game(dt: float) -> void:
 			c["collected"] = true
 			coins += 1
 			coin_punch_t = COIN_PUNCH_DURATION
-			coin_pickups.append({
-				"pos": Vector2(lane_x(c["lane"], c["p"]), row_y(c["p"])),
-				"scale": scale_at(c["p"]),
-				"t": COIN_PICKUP_FX_DURATION,
-			})
+			_spawn_spark(Vector2(lane_x(c["lane"], c["p"]), row_y(c["p"])), scale_at(c["p"]), COIN_PICKUP_FX_DURATION, COIN_SPARK_COLOR)
 			if not is_turbo:
 				turbo_gauge = minf(TURBO_GAUGE_MAX, turbo_gauge + TURBO_GAIN_PER_COIN)
 				if turbo_gauge >= TURBO_GAUGE_MAX:
@@ -465,9 +478,11 @@ func _update_game(dt: float) -> void:
 		turbo_flash_t = maxf(0.0, turbo_flash_t - dt)
 	if coin_punch_t > 0.0:
 		coin_punch_t = maxf(0.0, coin_punch_t - dt)
-	for fx in coin_pickups:
+	if near_miss_flash > 0.0:
+		near_miss_flash = maxf(0.0, near_miss_flash - dt)
+	for fx in spark_fx:
 		fx["t"] -= dt
-	coin_pickups = coin_pickups.filter(func(fx): return fx["t"] > 0.0)
+	spark_fx = spark_fx.filter(func(fx): return fx["t"] > 0.0)
 
 	# Camera shake only ever offsets this Node2D, never the HUD (a separate
 	# CanvasLayer, immune to its parent's 2D transform) - so it can never
@@ -592,8 +607,8 @@ func _draw() -> void:
 	for item in draw_items:
 		item["cb"].call()
 
-	for fx in coin_pickups:
-		_draw_coin_pickup_fx(fx)
+	for fx in spark_fx:
+		_draw_spark_fx(fx)
 
 	if turbo_ring_t > 0.0:
 		_draw_turbo_ring(px, py)
@@ -603,6 +618,8 @@ func _draw() -> void:
 	var sz := get_viewport_rect().size
 	if hit_flash > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, sz), Color(1, 0, 0, hit_flash * 0.35))
+	if near_miss_flash > 0.0:
+		draw_rect(Rect2(Vector2.ZERO, sz), Color(0.208, 0.878, 0.631, near_miss_flash / NEAR_MISS_FLASH_DURATION * 0.14))
 	if win_flash > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, sz), Color(1, 1, 1, win_flash * 0.6))
 
@@ -732,14 +749,16 @@ func _draw_coin(pos: Vector2, scale: float) -> void:
 	draw_texture_rect(TEX_COIN, Rect2(pos - size * 0.5, size), false)
 
 
-# Quick gold ring expanding from the exact pickup point - no dedicated
-# coin-sparkle asset exists yet, so this stays procedural (see coin.png's
-# own glow/spin for the baseline "approved" coin look this supplements).
-func _draw_coin_pickup_fx(fx: Dictionary) -> void:
-	var t: float = 1.0 - fx["t"] / COIN_PICKUP_FX_DURATION
+# Quick colored ring expanding from a world position - shared by coin
+# pickups (gold) and near-misses (teal). No dedicated sparkle asset exists
+# for either yet, so this stays procedural.
+func _draw_spark_fx(fx: Dictionary) -> void:
+	var t: float = 1.0 - fx["t"] / fx["duration"]
 	var radius: float = lerp(4.0, 26.0, t) * fx["scale"]
 	var alpha: float = 1.0 - t
-	draw_arc(fx["pos"], radius, 0.0, TAU, 20, Color(1.0, 0.85, 0.3, alpha * 0.9), 3.0 * fx["scale"], true)
+	var col: Color = fx["color"]
+	col.a = alpha * 0.9
+	draw_arc(fx["pos"], radius, 0.0, TAU, 20, col, 3.0 * fx["scale"], true)
 
 
 func _draw_finish_tape(p: float) -> void:
