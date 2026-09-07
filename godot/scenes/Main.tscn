@@ -6,7 +6,7 @@
 [ext_resource type="Texture2D" path="res://assets/hud/progress-track.png" id="4_track"]
 [ext_resource type="Texture2D" path="res://assets/hud/progress-car.png" id="5_car"]
 [ext_resource type="Texture2D" path="res://assets/hud/combo-word.png" id="6_combo"]
-[ext_resource type="Texture2D" path="res://assets/hud/turbo-frame.png" id="7_turbo"]
+[ext_resource type="Texture2D" path="res://assets/hud/turbo-gauge-base.png" id="7_turbo"]
 [ext_resource type="Texture2D" path="res://assets/hud/steer-left.png" id="8_left"]
 [ext_resource type="Texture2D" path="res://assets/hud/steer-right.png" id="9_right"]
 [ext_resource type="FontFile" path="res://assets/fonts/Rajdhani-Bold.ttf" id="10_display_font"]
@@ -201,7 +201,7 @@ anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
 offset_left = -210.0
-offset_top = -76.0
+offset_top = -54.0
 offset_right = 210.0
 offset_bottom = -4.0
 mouse_filter = 2
@@ -215,10 +215,8 @@ stretch_mode = 6
 mouse_filter = 2
 
 [node name="TurboSegments" type="Control" parent="HUD/Root/TurboGaugeTrack"]
-offset_left = 118.0
-offset_top = 19.0
-offset_right = 386.0
-offset_bottom = 47.0
+offset_right = 420.0
+offset_bottom = 50.0
 mouse_filter = 2
 
 [node name="BtnLeft" type="TextureButton" parent="HUD/Root"]

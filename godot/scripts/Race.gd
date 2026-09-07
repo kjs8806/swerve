@@ -73,7 +73,10 @@ const TRAFFIC_TEXTURES := [
 ]
 const TEX_COIN := preload("res://assets/collectibles/coin.png")
 const TEX_TURBO_PICKUP := preload("res://assets/collectibles/turbo-pickup.png")
-const TEX_TURBO_SEGMENT := preload("res://assets/hud/turbo-segment-neutral.png")
+const TURBO_SEGMENT_COUNT := 17
+const TEX_TURBO_SEGMENT_RED := preload("res://assets/hud/turbo-segment-red.png")
+const TEX_TURBO_SEGMENT_ORANGE := preload("res://assets/hud/turbo-segment-orange.png")
+const TEX_TURBO_SEGMENT_YELLOW := preload("res://assets/hud/turbo-segment-yellow.png")
 
 # Approved turbo-effect sprites.
 const TEX_TURBO_EXHAUST := preload("res://assets/effects/turbo-exhaust-flames.png")
@@ -174,16 +177,27 @@ func _audio_call(method: StringName, args: Array = []) -> void:
 func _build_turbo_segments() -> void:
 	for child in turbo_segments.get_children():
 		child.queue_free()
-	const SEGMENT_COUNT := 12
-	const SEGMENT_WIDTH := 19.0
-	const SEGMENT_GAP := 3.0
-	for i in range(SEGMENT_COUNT):
+	# Pixel-matched to the approved 840x100 gauge artwork at its 420x50
+	# runtime size. The base contains the frame, label, and 17 dark slots;
+	# these colored overlays are revealed as the live gauge fills.
+	const SEGMENT_X: Array[float] = [
+		105.16, 120.68, 135.99, 151.40, 166.60, 181.91,
+		197.32, 212.73, 228.56, 244.39, 260.33, 276.47,
+		292.40, 308.23, 324.27, 340.31, 356.56,
+	]
+	for i in range(TURBO_SEGMENT_COUNT):
 		var segment := TextureRect.new()
-		segment.texture = TEX_TURBO_SEGMENT
+		if i < 3:
+			segment.texture = TEX_TURBO_SEGMENT_RED
+		elif i < 8:
+			segment.texture = TEX_TURBO_SEGMENT_ORANGE
+		else:
+			segment.texture = TEX_TURBO_SEGMENT_YELLOW
 		segment.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		segment.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		segment.position = Vector2(i * (SEGMENT_WIDTH + SEGMENT_GAP), 0.0)
-		segment.size = Vector2(SEGMENT_WIDTH, turbo_segments.size.y)
+		segment.position = Vector2(SEGMENT_X[i], 14.0)
+		segment.size = Vector2(25.0, 25.0)
+		segment.visible = false
 		segment.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		turbo_segments.add_child(segment)
 
@@ -641,32 +655,16 @@ func _update_hud() -> void:
 	var marker_end := track_w - player_marker.size.x - marker_start
 	player_marker.position.x = lerpf(marker_start, marker_end, pct)
 
-	var gauge_pct: float = turbo_gauge / TURBO_GAUGE_MAX
-	var lit_count := ceili(gauge_pct * turbo_segments.get_child_count())
+	var gauge_pct: float = clampf(turbo_gauge / TURBO_GAUGE_MAX, 0.0, 1.0)
+	var lit_count: int = clampi(ceili(gauge_pct * TURBO_SEGMENT_COUNT), 0, TURBO_SEGMENT_COUNT)
 	for i in range(turbo_segments.get_child_count()):
 		var segment := turbo_segments.get_child(i) as TextureRect
-		if i < lit_count:
-			segment.modulate = _turbo_segment_color(i)
-		else:
-			segment.modulate = Color(0.11, 0.15, 0.21, 0.72)
+		segment.visible = i < lit_count
 	if turbo_banner != null:
 		turbo_banner.visible = is_turbo
 	if is_turbo and turbo_banner != null:
 		var glow: float = 0.8 + 0.2 * sin(elapsed_t * 8.0)
 		turbo_banner.modulate = Color(glow, glow, glow, 1.0)
-
-
-# Match the approved mockup's deliberate stepped fill instead of tinting every
-# bar with a different interpolation value: 3 red, 4 orange, 3 amber, 2 yellow.
-func _turbo_segment_color(i: int) -> Color:
-	if i < 3:
-		return Color8(0xff, 0x24, 0x18)
-	elif i < 7:
-		return Color8(0xff, 0x78, 0x00)
-	elif i < 10:
-		return Color8(0xff, 0xc4, 0x00)
-	else:
-		return Color8(0xff, 0xf2, 0x00)
 
 
 # ---------- Rendering ----------
