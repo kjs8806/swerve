@@ -16,6 +16,7 @@ const ROAD_LENGTH := 260.0
 const BASE_SPEED_START := 150.0
 const BASE_SPEED_RAMP := 3.2
 const BASE_SPEED_MAX := 340.0
+const TRAFFIC_SPEED_MULT := 0.8
 
 const COLLISION_PENALTY_MULT := 0.22
 const COLLISION_RECOVER_TIME := 1.7
@@ -128,19 +129,24 @@ func _build_turbo_segments() -> void:
 
 
 # ---------- Perspective helpers (mirror the JS lane/road math exactly) ----------
-# ROAD_VANISH_Y_FRAC/ROAD_WIDTH_SLOPE are not aesthetic choices - they were
-# measured directly off assets/environment/guardrails.png (the rails'
-# baked-in vanishing point and widening rate) so the procedural road surface
-# lines up with the pre-rendered guardrail art with no gap, and actually
-# reaches the vanishing point instead of stopping short of it.
+# ROAD_VANISH_Y_FRAC/ROAD_WIDTH_SLOPE were measured directly off the approved
+# reference screenshot's road (higher, tighter vanishing point and a
+# steeper widening rate than assets/environment/guardrails.png was drawn
+# against). GUARDRAIL_Y0_FRAC/GUARDRAIL_H_FRAC re-project that fixed,
+# pre-rendered guardrail art onto the new geometry - the art's own
+# perspective can't change, so instead it's drawn into a taller, higher
+# rect that makes its baked vanishing point and taper rate land in the
+# same place the new road math puts them.
 func get_w() -> float:
 	return get_viewport_rect().size.x
 
 func get_h() -> float:
 	return get_viewport_rect().size.y
 
-const ROAD_VANISH_Y_FRAC := 0.057
-const ROAD_WIDTH_SLOPE := 0.598
+const ROAD_VANISH_Y_FRAC := 0.023
+const ROAD_WIDTH_SLOPE := 0.653
+const GUARDRAIL_Y0_FRAC := -0.0292
+const GUARDRAIL_H_FRAC := 0.9158
 
 func horizon_y() -> float:
 	return get_h() * ROAD_VANISH_Y_FRAC
@@ -342,7 +348,7 @@ func _update_game(dt: float) -> void:
 	# passed) - otherwise a resolved car freezes in place forever instead
 	# of continuing off-screen and becoming eligible for removal.
 	for o in obstacles:
-		o["p"] += dp
+		o["p"] += dp * (TRAFFIC_SPEED_MULT if o["kind"] == "traffic" else 1.0)
 		if o["resolved"]:
 			continue
 
@@ -506,7 +512,7 @@ func _draw() -> void:
 
 	var px := lane_x(player_lane_visual, 1.0)
 	var py := player_row_y()
-	var p_scale := scale_at(1.0) * 1.05
+	var p_scale := scale_at(1.0) * 1.05 * 1.2
 	var turbo_now := is_turbo
 	var t_now := elapsed_t
 	draw_items.append({"p": 1.001, "cb": func():
@@ -607,7 +613,7 @@ func _draw_road() -> void:
 
 	draw_line(Vector2(cx, hy), Vector2(cx - road_half_width(h), h), Color.WHITE, 4.0)
 	draw_line(Vector2(cx, hy), Vector2(cx + road_half_width(h), h), Color.WHITE, 4.0)
-	draw_texture_rect(TEX_GUARDRAILS, Rect2(0, 0, w, h), false)
+	draw_texture_rect(TEX_GUARDRAILS, Rect2(0, h * GUARDRAIL_Y0_FRAC, w, h * GUARDRAIL_H_FRAC), false)
 
 
 func _draw_sprite_centered(texture: Texture2D, pos: Vector2, scale: float) -> void:
@@ -616,18 +622,19 @@ func _draw_sprite_centered(texture: Texture2D, pos: Vector2, scale: float) -> vo
 
 
 # Lane divider lines all radiate outward from the road's vanishing point
-# (which sits right behind the timer badge). A car actually driving down a
-# lane would be angled slightly along that same radiating line rather than
-# always pointing screen-up - but the full geometric angle (the same one
-# the lane lines use) reads as a banked/sloped road once you factor in a
-# rigid car body, so it's heavily damped down to a subtle lean.
+# (which sits right behind the timer badge) - that radiating line is the
+# lane itself, so a car actually driving down it would be angled to match
+# exactly. For the player's car (closest to camera, most prominent) the
+# full geometric angle reads as a banked/sloped road once you factor in a
+# rigid car body, so it's heavily damped to a subtle lean; traffic further
+# away uses the true, undamped angle so it stays parallel to its lane.
 const SPRITE_TILT_DAMPING := 0.3
 
-func _draw_sprite_toward_vanishing_point(texture: Texture2D, pos: Vector2, scale: float) -> void:
+func _draw_sprite_toward_vanishing_point(texture: Texture2D, pos: Vector2, scale: float, damping: float = SPRITE_TILT_DAMPING) -> void:
 	var size := texture.get_size() * scale
 	var dx := pos.x - center_x()
 	var dy := pos.y - horizon_y()
-	var angle := (atan2(-dx, dy) if dy > 0.0 else 0.0) * SPRITE_TILT_DAMPING
+	var angle := (atan2(-dx, dy) if dy > 0.0 else 0.0) * damping
 	draw_set_transform(pos, angle, Vector2.ONE)
 	draw_texture_rect(texture, Rect2(-size * 0.5, size), false)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
@@ -640,7 +647,7 @@ func _draw_obstacle(obstacle: Dictionary) -> void:
 	if obstacle["kind"] == "hazard":
 		_draw_sprite_centered(HAZARD_TEXTURES[obstacle["variant"]], pos, visual_scale)
 	else:
-		_draw_sprite_toward_vanishing_point(TRAFFIC_TEXTURES[obstacle["variant"]], pos, visual_scale * 0.82)
+		_draw_sprite_toward_vanishing_point(TRAFFIC_TEXTURES[obstacle["variant"]], pos, visual_scale * 0.82 * 1.3, 1.0)
 
 
 func _draw_coin(pos: Vector2, scale: float) -> void:
