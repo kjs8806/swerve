@@ -255,7 +255,7 @@ func ease_p(p: float) -> float:
 	return pow(clampf(p, 0.0, 2.0), 1.35)
 
 func half_width_at(p: float) -> float:
-	var top_half := get_w() * 0.095
+	var top_half := get_w() * 0.16
 	var bot_half := get_w() * 0.50
 	return lerp(top_half, bot_half, ease_p(p))
 
@@ -815,11 +815,11 @@ func _draw_road() -> void:
 		var frac: float = LANE_EDGES[i]
 		var x0: float = cx + frac * half_width_at(0.0)
 		var x1: float = cx + frac * half_width_at(1.0)
-		_draw_dashed_line(Vector2(x0, hy), Vector2(x1, h), Color(1, 1, 1, 0.88), 4.0, 16.0, 15.0, fmod(road_scroll, 31.0))
+		_draw_dashed_line(Vector2(x0, hy), Vector2(x1, h), Color(1, 1, 1, 0.88), 4.0, 16.0, 15.0, 0.0)
 
 	draw_line(Vector2(cx - top_half, hy), Vector2(cx - bot_half, h), Color.WHITE, 4.0)
 	draw_line(Vector2(cx + top_half, hy), Vector2(cx + bot_half, h), Color.WHITE, 4.0)
-	draw_texture_rect(TEX_GUARDRAILS, Rect2(0, 0, w, h), false)
+	_draw_moving_guardrails(cx, hy, h)
 
 
 func _draw_sprite_centered(texture: Texture2D, pos: Vector2, scale: float) -> void:
@@ -874,31 +874,52 @@ func _draw_scenery(w: float, h: float, hy: float, cx: float) -> void:
 		draw_colored_polygon(pts, Color8(0x6b, 0x53, 0x3c))
 
 
-func _draw_guardrail(cx: float, hy: float, h: float, top_half: float, bot_half: float, side: float) -> void:
-	var rail_w_top := 5.0
-	var rail_w_bot := 16.0
-	var inner_top: float = top_half * side
-	var inner_bot: float = bot_half * side
-	var outer_top: float = inner_top + side * rail_w_top
-	var outer_bot: float = inner_bot + side * rail_w_bot
-	var poly := PackedVector2Array([
-		Vector2(cx + inner_top, hy), Vector2(cx + outer_top, hy),
-		Vector2(cx + outer_bot, h), Vector2(cx + inner_bot, h),
-	])
-	draw_colored_polygon(poly, Color8(0xd8, 0xdf, 0xe6))
+func _guardrail_point(cx: float, hy: float, h: float, p: float, side: float, outward: float = 0.0) -> Vector2:
+	var perspective := ease_p(p)
+	var gap := lerp(7.0, 24.0, perspective)
+	var x := cx + side * (half_width_at(p) + gap + outward)
+	var y := lerp(hy, h, perspective)
+	return Vector2(x, y)
 
-	var steps := 10
-	for i in range(steps):
-		var p0: float = float(i) / steps
-		var p1: float = float(i + 1) / steps
-		if i % 2 != 0:
-			continue
-		var s0 := scale_at(p0)
-		var y0 := row_y(p0)
-		var hw0: float = half_width_at(p0) * side + side * lerp(rail_w_top, rail_w_bot, ease_p(p0)) * 0.5
-		var post_w: float = maxf(2.0, 4.0 * s0)
-		var post_h: float = maxf(4.0, 10.0 * s0)
-		draw_rect(Rect2(cx + hw0 - post_w * 0.5, y0 - post_h, post_w, post_h), Color8(0xc0, 0x2c, 0x46))
+
+func _draw_moving_guardrails(cx: float, hy: float, h: float) -> void:
+	# The rail beams remain structurally continuous while their posts and amber
+	# reflectors advance toward the camera. This produces forward motion without
+	# scrolling the road's lane dividers.
+	const RAIL_SEGMENTS := 28
+	const POST_COUNT := 13
+	const POST_SCROLL_DISTANCE := 230.0
+	var phase := fmod(road_scroll / POST_SCROLL_DISTANCE, 1.0)
+
+	for side in [-1.0, 1.0]:
+		# Two cyan metallic beams follow the road perspective, separated from
+		# the white road edge so the ocean remains visible through the gap.
+		for i in range(RAIL_SEGMENTS):
+			var p0 := float(i) / RAIL_SEGMENTS
+			var p1 := float(i + 1) / RAIL_SEGMENTS
+			var perspective := ease_p((p0 + p1) * 0.5)
+			var width := lerp(2.5, 9.0, perspective)
+			var a0 := _guardrail_point(cx, hy, h, p0, side)
+			var a1 := _guardrail_point(cx, hy, h, p1, side)
+			var b0 := _guardrail_point(cx, hy, h, p0, side, lerp(5.0, 16.0, ease_p(p0)))
+			var b1 := _guardrail_point(cx, hy, h, p1, side, lerp(5.0, 16.0, ease_p(p1)))
+			draw_line(a0, a1, Color8(0x08, 0x3b, 0x57), width + 3.0, true)
+			draw_line(a0, a1, Color8(0x54, 0xe8, 0xe0), width, true)
+			draw_line(b0, b1, Color8(0x05, 0x2d, 0x48), maxf(2.0, width * 0.72) + 2.0, true)
+			draw_line(b0, b1, Color8(0x2b, 0xb9, 0xc7), maxf(2.0, width * 0.72), true)
+
+		for i in range(POST_COUNT):
+			var p := fmod(float(i) / POST_COUNT + phase, 1.0)
+			var perspective := ease_p(p)
+			var scale := lerp(0.38, 1.45, perspective)
+			var top := _guardrail_point(cx, hy, h, p, side, lerp(2.0, 8.0, perspective))
+			var bottom := top + Vector2(side * 3.0 * scale, 17.0 * scale)
+			draw_line(top, bottom, Color8(0x03, 0x25, 0x38), 7.0 * scale, true)
+			draw_line(top, bottom, Color8(0x35, 0xc9, 0xc7), 4.2 * scale, true)
+			var reflector_size := Vector2(5.0, 9.0) * scale
+			var reflector_pos := bottom - reflector_size * 0.5
+			draw_rect(Rect2(reflector_pos, reflector_size), Color8(0x45, 0x24, 0x08), true)
+			draw_rect(Rect2(reflector_pos + reflector_size * 0.18, reflector_size * 0.64), Color8(0xff, 0xb0, 0x18), true)
 
 
 func _ellipse_points(center: Vector2, rx: float, ry: float, segments: int = 16) -> PackedVector2Array:
