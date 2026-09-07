@@ -30,6 +30,9 @@ const TURBO_DRAIN_PER_SEC := TURBO_GAUGE_MAX / TURBO_DURATION
 const TURBO_SPAWN_MIN := 7.0
 const TURBO_SPAWN_MAX := 11.0
 
+# Near-miss timing is intentionally independent from vehicle artwork scale.
+# Starting slightly earlier keeps the maneuver readable with the larger HD cars.
+const NEAR_MISS_ZONE_START := 0.78
 const DANGER_ZONE_START := 0.83
 const COLLIDE_AT := 0.97
 const PASS_AT := 1.08
@@ -62,6 +65,12 @@ const COIN_SPARK_COLOR := Color(1.0, 0.85, 0.3)
 const NEAR_MISS_FX_DURATION := 0.3
 const NEAR_MISS_SPARK_COLOR := Color(0.208, 0.878, 0.631)
 const NEAR_MISS_FLASH_DURATION := 0.18
+
+# Render the entire combo badge (Nx label + COMBO artwork) at 80% of its
+# original size. Animation values below preserve the same relative punch.
+const COMBO_BADGE_SCALE := 0.80
+const COMBO_BADGE_INTRO_SCALE := COMBO_BADGE_SCALE * 0.72
+const COMBO_BADGE_PEAK_SCALE := COMBO_BADGE_SCALE * 1.12
 
 const TEX_BACKGROUND := preload("res://assets/environment/ocean-sky.png")
 const TEX_GUARDRAILS := preload("res://assets/environment/guardrails.png")
@@ -343,20 +352,20 @@ func _play_combo_badge_fx() -> void:
 	if combo_badge_tween != null and combo_badge_tween.is_valid():
 		combo_badge_tween.kill()
 	combo_panel.pivot_offset = combo_panel.size * Vector2(0.82, 0.5)
-	combo_panel.scale = Vector2(0.72, 0.72)
+	combo_panel.scale = Vector2.ONE * COMBO_BADGE_INTRO_SCALE
 	combo_panel.rotation = -0.045
 	combo_panel.modulate = Color(1.0, 0.82, 0.42, 0.25)
 	combo_art.position.x = 24.0
 	combo_art.modulate = Color(1.35, 1.12, 0.72, 1.0)
 	combo_badge_tween = create_tween().set_parallel(true)
 	combo_badge_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	combo_badge_tween.tween_property(combo_panel, "scale", Vector2(1.12, 1.12), 0.14)
+	combo_badge_tween.tween_property(combo_panel, "scale", Vector2.ONE * COMBO_BADGE_PEAK_SCALE, 0.14)
 	combo_badge_tween.tween_property(combo_panel, "rotation", 0.0, 0.14)
 	combo_badge_tween.tween_property(combo_panel, "modulate", Color.WHITE, 0.10)
 	combo_badge_tween.tween_property(combo_art, "position:x", 0.0, 0.16)
 	combo_badge_tween.tween_property(combo_art, "modulate", Color.WHITE, 0.22)
 	combo_badge_tween.chain().set_parallel(false)
-	combo_badge_tween.tween_property(combo_panel, "scale", Vector2.ONE, 0.16).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	combo_badge_tween.tween_property(combo_panel, "scale", Vector2.ONE * COMBO_BADGE_SCALE, 0.16).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
 # ---------- Input ----------
@@ -381,7 +390,7 @@ func _check_near_miss_on_leave(from_lane: int) -> void:
 	for o in obstacles:
 		if o["resolved"]:
 			continue
-		if o["lane"] == from_lane and o["p"] >= DANGER_ZONE_START and o["p"] < COLLIDE_AT:
+		if o["lane"] == from_lane and o["p"] >= NEAR_MISS_ZONE_START and o["p"] < COLLIDE_AT:
 			o["dodged"] = true
 
 
@@ -522,7 +531,7 @@ func _update_game(dt: float) -> void:
 		if o["resolved"]:
 			continue
 
-		if o["lane"] == player_lane and o["p"] >= DANGER_ZONE_START and o["p"] < COLLIDE_AT:
+		if o["lane"] == player_lane and o["p"] >= NEAR_MISS_ZONE_START and o["p"] < COLLIDE_AT:
 			o["was_near"] = true
 
 		if o["p"] >= COLLIDE_AT and o["lane"] == player_lane:
