@@ -73,7 +73,7 @@ const TRAFFIC_TEXTURES := [
 ]
 const TEX_COIN := preload("res://assets/collectibles/coin.png")
 const TEX_TURBO_PICKUP := preload("res://assets/collectibles/turbo-pickup.png")
-const TEX_TURBO_SEGMENT := preload("res://assets/hud/turbo-segment.png")
+const TEX_TURBO_SEGMENT := preload("res://assets/hud/turbo-segment-neutral.png")
 
 # Approved turbo-effect sprites.
 const TEX_TURBO_EXHAUST := preload("res://assets/effects/turbo-exhaust-flames.png")
