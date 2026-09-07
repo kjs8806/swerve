@@ -148,6 +148,7 @@ offset_left = -318.0
 offset_top = 2.0
 offset_right = -8.0
 offset_bottom = 105.0
+visible = false
 mouse_filter = 2
 
 [node name="ComboArt" type="TextureRect" parent="HUD/Root/ComboPanel"]

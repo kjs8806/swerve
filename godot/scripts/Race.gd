@@ -669,6 +669,7 @@ func _update_hud() -> void:
 	coin_label.pivot_offset = coin_label.size * 0.5
 	var coin_punch_frac: float = coin_punch_t / COIN_PUNCH_DURATION
 	coin_label.scale = Vector2.ONE * (1.0 + (COIN_PUNCH_SCALE - 1.0) * coin_punch_frac)
+	combo_panel.visible = combo > 0
 	combo_label.text = "%dx" % maxi(1, combo)
 
 	var pct: float = clampf(distance / FINISH_DISTANCE, 0.0, 1.0)
