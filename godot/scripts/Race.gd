@@ -65,13 +65,14 @@ const NEAR_MISS_FLASH_DURATION := 0.18
 
 const TEX_BACKGROUND := preload("res://assets/environment/ocean-sky.png")
 const TEX_GUARDRAILS := preload("res://assets/environment/guardrails.png")
-const TEX_PLAYER := preload("res://assets/vehicles/player-gray.png")
+const HD_VEHICLE_SCALE := 0.25
+const TEX_PLAYER := preload("res://assets/vehicles/player-gray-hd.png")
 const TRAFFIC_TEXTURES := [
-	preload("res://assets/vehicles/traffic-coral.png"),
-	preload("res://assets/vehicles/traffic-yellow.png"),
-	preload("res://assets/vehicles/traffic-blue.png"),
-	preload("res://assets/vehicles/traffic-green.png"),
-	preload("res://assets/vehicles/traffic-orange.png"),
+	preload("res://assets/vehicles/traffic-coral-hd.png"),
+	preload("res://assets/vehicles/traffic-yellow-hd.png"),
+	preload("res://assets/vehicles/traffic-blue-hd.png"),
+	preload("res://assets/vehicles/traffic-green-hd.png"),
+	preload("res://assets/vehicles/traffic-orange-hd.png"),
 ]
 const TEX_COIN := preload("res://assets/collectibles/coin.png")
 const TEX_TURBO_PICKUP := preload("res://assets/collectibles/turbo-pickup.png")
@@ -730,7 +731,7 @@ func _draw() -> void:
 	draw_items.append({"p": 1.001, "cb": func():
 		if turbo_now:
 			_draw_flame_trail(Vector2(px, py), p_scale, t_now)
-		_draw_sprite_centered(TEX_PLAYER, Vector2(px, py), p_scale)
+		_draw_sprite_centered(TEX_PLAYER, Vector2(px, py), p_scale * HD_VEHICLE_SCALE)
 	})
 
 	draw_items.sort_custom(func(a, b): return a["p"] < b["p"])
@@ -832,7 +833,7 @@ func _draw_obstacle(obstacle: Dictionary) -> void:
 	if obstacle["kind"] == "hazard":
 		_draw_sprite_centered(HAZARD_TEXTURES[obstacle["variant"]], pos, visual_scale)
 	else:
-		_draw_sprite_centered(TRAFFIC_TEXTURES[obstacle["variant"]], pos, visual_scale * 0.82)
+		_draw_sprite_centered(TRAFFIC_TEXTURES[obstacle["variant"]], pos, visual_scale * 0.82 * HD_VEHICLE_SCALE)
 
 
 func _draw_sky(w: float, hy: float) -> void:
