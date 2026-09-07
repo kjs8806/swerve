@@ -657,7 +657,7 @@ func _draw_road() -> void:
 	draw_colored_polygon(poly_hi, Color(0.28, 0.31, 0.4, 0.55))
 
 	for i in range(1, LANES):
-		var frac := LANE_EDGES[i]
+		var frac: float = LANE_EDGES[i]
 		var x0: float = cx + frac * half_width_at(0.0)
 		var x1: float = cx + frac * half_width_at(1.0)
 		_draw_dashed_line(Vector2(x0, hy), Vector2(x1, h), Color(1, 1, 1, 0.88), 4.0, 16.0, 15.0, fmod(road_scroll, 31.0))
@@ -796,7 +796,7 @@ func _draw_car(pos: Vector2, scale: float, color: Color) -> void:
 
 
 func _draw_coin(pos: Vector2, scale: float) -> void:
-	var spin := 0.68 + 0.32 * abs(sin(elapsed_t * 5.0 + pos.x * 0.03))
+	var spin: float = 0.68 + 0.32 * abs(sin(elapsed_t * 5.0 + pos.x * 0.03))
 	var size := TEX_COIN.get_size() * scale
 	size.x *= spin
 	draw_texture_rect(TEX_COIN, Rect2(pos - size * 0.5, size), false)
