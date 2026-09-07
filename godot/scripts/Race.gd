@@ -86,10 +86,11 @@ const TEX_TURBO_EXHAUST := preload("res://assets/effects/turbo-exhaust-flames.pn
 const TEX_TURBO_RING := preload("res://assets/effects/turbo-energy-ring.png")
 const TEX_TURBO_FLASH := preload("res://assets/effects/turbo-activation-flash.png")
 const TEX_TURBO_SPEED_LINES := preload("res://assets/effects/turbo-speed-lines.png")
+const HD_HAZARD_SCALE := 0.25
 const HAZARD_TEXTURES := [
-	preload("res://assets/obstacles/pothole.png"),
-	preload("res://assets/obstacles/loose-tire.png"),
-	preload("res://assets/obstacles/traffic-cone.png"),
+	preload("res://assets/obstacles/pothole-hd.png"),
+	preload("res://assets/obstacles/loose-tire-hd.png"),
+	preload("res://assets/obstacles/traffic-cone-hd.png"),
 ]
 
 enum State { READY, PLAYING, WIN, LOSE }
@@ -831,7 +832,7 @@ func _draw_obstacle(obstacle: Dictionary) -> void:
 	var pos := Vector2(lane_x(obstacle["lane"], p), row_y(p))
 	var visual_scale := scale_at(p)
 	if obstacle["kind"] == "hazard":
-		_draw_sprite_centered(HAZARD_TEXTURES[obstacle["variant"]], pos, visual_scale)
+		_draw_sprite_centered(HAZARD_TEXTURES[obstacle["variant"]], pos, visual_scale * HD_HAZARD_SCALE)
 	else:
 		_draw_sprite_centered(TRAFFIC_TEXTURES[obstacle["variant"]], pos, visual_scale * 0.82 * HD_VEHICLE_SCALE)
 
