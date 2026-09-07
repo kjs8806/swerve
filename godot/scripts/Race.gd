@@ -72,7 +72,6 @@ var penalty_t: float = 0.0
 var boost_t: float = 0.0
 var hit_flash: float = 0.0
 var win_flash: float = 0.0
-var road_scroll: float = 0.0
 var obstacles: Array = []
 var coins_list: Array = []
 var obstacle_timer: float = 0.0
@@ -85,8 +84,10 @@ var combo_popup_timer: float = 0.0
 # ---------- HUD refs ----------
 @onready var timer_label: Label = $HUD/Root/TimerPanel/TimerLabel
 @onready var coin_label: Label = $HUD/Root/CoinPanel/CoinLabel
+@onready var combo_panel: Control = $HUD/Root/ComboPanel
 @onready var combo_label: Label = $HUD/Root/ComboPanel/ComboLabel
 @onready var progress_track: Control = $HUD/Root/ProgressTrack
+@onready var progress_fill: ColorRect = $HUD/Root/ProgressTrack/ProgressFill
 @onready var player_marker: TextureRect = $HUD/Root/ProgressTrack/PlayerMarker
 @onready var turbo_gauge_track: Control = $HUD/Root/TurboGaugeTrack
 @onready var turbo_segments: Control = $HUD/Root/TurboGaugeTrack/TurboSegments
@@ -196,7 +197,6 @@ func reset_game() -> void:
 	boost_t = 0.0
 	hit_flash = 0.0
 	win_flash = 0.0
-	road_scroll = 0.0
 	obstacles.clear()
 	coins_list.clear()
 	obstacle_timer = 0.6
@@ -337,7 +337,6 @@ func _update_game(dt: float) -> void:
 	var speed := current_speed()
 	distance += speed * dt
 	var dp: float = (speed / ROAD_LENGTH) * dt
-	road_scroll += speed * dt
 
 	# Obstacles: position always advances, even once resolved (hit or
 	# passed) - otherwise a resolved car freezes in place forever instead
@@ -451,13 +450,15 @@ func _update_hud() -> void:
 	timer_mat.set_shader_parameter("color_mid", timer_grad[1])
 	timer_mat.set_shader_parameter("color_bottom", timer_grad[2])
 	coin_label.text = "%d" % coins
-	combo_label.text = "%dx" % maxi(1, combo)
+	combo_label.text = "%dx" % combo
+	combo_panel.visible = combo > 0
 
 	var pct: float = clampf(distance / FINISH_DISTANCE, 0.0, 1.0)
 	var track_w: float = progress_track.size.x
 	var marker_start := 3.0
 	var marker_end := track_w * 0.87 - player_marker.size.x
 	player_marker.position.x = lerpf(marker_start, marker_end, pct)
+	progress_fill.size.x = maxf(0.0, player_marker.position.x + player_marker.size.x * 0.5 - marker_start)
 
 	var gauge_pct: float = turbo_gauge / TURBO_GAUGE_MAX
 	var lit_count := ceili(gauge_pct * turbo_segments.get_child_count())
@@ -533,7 +534,10 @@ func _draw_vgrad(rect: Rect2, c_top: Color, c_bottom: Color, steps: int = 16) ->
 		draw_rect(Rect2(rect.position.x, rect.position.y + i * step_h, rect.size.x, step_h + 1.0), col)
 
 
-func _draw_dashed_line(p1: Vector2, p2: Vector2, color: Color, width: float, dash: float, gap: float, offset: float) -> void:
+# p1 is the far (horizon) end and p2 is the near (player) end - each dash
+# fades from alpha_far up to alpha_near so the lines don't compete for
+# attention far up the road, matching the vanishing guardrails/road shading.
+func _draw_dashed_line(p1: Vector2, p2: Vector2, color: Color, width: float, dash: float, gap: float, offset: float, alpha_far: float, alpha_near: float) -> void:
 	var dir: Vector2 = p2 - p1
 	var length := dir.length()
 	if length <= 0.0:
@@ -547,7 +551,10 @@ func _draw_dashed_line(p1: Vector2, p2: Vector2, color: Color, width: float, das
 		var seg_start: float = maxf(pos, 0.0)
 		var seg_end: float = minf(pos + dash, length)
 		if seg_end > seg_start:
-			draw_line(p1 + dir * seg_start, p1 + dir * seg_end, color, width)
+			var t: float = ((seg_start + seg_end) * 0.5) / length
+			var seg_color := color
+			seg_color.a = color.a * lerpf(alpha_far, alpha_near, t)
+			draw_line(p1 + dir * seg_start, p1 + dir * seg_end, seg_color, width)
 		pos += pattern
 
 
@@ -596,7 +603,7 @@ func _draw_road() -> void:
 		var frac := LANE_EDGES[i]
 		var x0: float = cx + frac * road_half_width(hy)
 		var x1: float = cx + frac * road_half_width(h)
-		_draw_dashed_line(Vector2(x0, hy), Vector2(x1, h), Color(1, 1, 1, 0.88), 4.0, 30.0, 34.0, fmod(road_scroll, 64.0))
+		_draw_dashed_line(Vector2(x0, hy), Vector2(x1, h), Color(1, 1, 1, 0.88), 4.0, 30.0, 34.0, 0.0, 0.08, 1.0)
 
 	draw_line(Vector2(cx, hy), Vector2(cx - road_half_width(h), h), Color.WHITE, 4.0)
 	draw_line(Vector2(cx, hy), Vector2(cx + road_half_width(h), h), Color.WHITE, 4.0)
@@ -609,14 +616,18 @@ func _draw_sprite_centered(texture: Texture2D, pos: Vector2, scale: float) -> vo
 
 
 # Lane divider lines all radiate outward from the road's vanishing point
-# (which sits right behind the timer badge), so a car actually driving down
-# a lane would be angled along that same radiating line rather than always
-# pointing screen-up. This tilts a sprite's vertical axis to match.
+# (which sits right behind the timer badge). A car actually driving down a
+# lane would be angled slightly along that same radiating line rather than
+# always pointing screen-up - but the full geometric angle (the same one
+# the lane lines use) reads as a banked/sloped road once you factor in a
+# rigid car body, so it's heavily damped down to a subtle lean.
+const SPRITE_TILT_DAMPING := 0.3
+
 func _draw_sprite_toward_vanishing_point(texture: Texture2D, pos: Vector2, scale: float) -> void:
 	var size := texture.get_size() * scale
 	var dx := pos.x - center_x()
 	var dy := pos.y - horizon_y()
-	var angle := atan2(-dx, dy) if dy > 0.0 else 0.0
+	var angle := (atan2(-dx, dy) if dy > 0.0 else 0.0) * SPRITE_TILT_DAMPING
 	draw_set_transform(pos, angle, Vector2.ONE)
 	draw_texture_rect(texture, Rect2(-size * 0.5, size), false)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
