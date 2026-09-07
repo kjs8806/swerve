@@ -318,9 +318,17 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 
 # ---------- Spawning ----------
+# Spawn intervals shrink to well under an obstacle's ~1.2-1.5s travel time
+# at high difficulty, so waves overlap on the road - picking lanes only
+# from THIS wave's own set (the old approach) can't see obstacles a
+# previous wave left in flight, and the two together can end up covering
+# every lane at once (verified by simulation: possible with the old
+# per-wave-only logic). Guaranteeing a stronger, simpler invariant instead
+# - at least one lane is always completely free of any unresolved
+# obstacle - makes that structurally impossible regardless of how waves
+# overlap.
 func _spawn_obstacle_wave() -> void:
 	var t := time
-	var open_lanes: int = (LANES - 1) if t < 8.0 else (LANES - 2)
 	var count: int
 	if t < 8.0:
 		count = 1
@@ -328,22 +336,32 @@ func _spawn_obstacle_wave() -> void:
 		count = 1 if randf() < 0.6 else 2
 	else:
 		count = 2 if randf() < 0.5 else 3
-	count = clampi(count, 1, LANES - maxi(1, LANES - open_lanes))
-	count = mini(count, LANES - 1)
 
-	var lanes: Array = []
+	var occupied_lanes: Dictionary = {}
+	for o in obstacles:
+		if not o["resolved"]:
+			occupied_lanes[o["lane"]] = true
+
+	var free_lanes: Array = []
 	for i in range(LANES):
-		lanes.append(i)
-	for i in range(lanes.size() - 1, 0, -1):
+		if not occupied_lanes.has(i):
+			free_lanes.append(i)
+
+	# Leave at least one already-free lane untouched by this wave too.
+	count = mini(count, maxi(0, free_lanes.size() - 1))
+	if count <= 0:
+		return
+
+	for i in range(free_lanes.size() - 1, 0, -1):
 		var j := randi() % (i + 1)
-		var tmp = lanes[i]
-		lanes[i] = lanes[j]
-		lanes[j] = tmp
+		var tmp = free_lanes[i]
+		free_lanes[i] = free_lanes[j]
+		free_lanes[j] = tmp
 
 	for i in range(count):
 		var is_hazard := randf() < 0.32
 		obstacles.append({
-			"lane": lanes[i], "p": 0.0, "resolved": false,
+			"lane": free_lanes[i], "p": 0.0, "resolved": false,
 			"dodged": false, "was_near": false,
 			"kind": "hazard" if is_hazard else "traffic",
 			"variant": randi() % (HAZARD_TEXTURES.size() if is_hazard else TRAFFIC_TEXTURES.size()),
