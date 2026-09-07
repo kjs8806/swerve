@@ -93,14 +93,6 @@ expand_mode = 1
 stretch_mode = 6
 mouse_filter = 2
 
-[node name="ProgressFill" type="ColorRect" parent="HUD/Root/ProgressTrack"]
-offset_left = 3.0
-offset_top = 8.0
-offset_right = 3.0
-offset_bottom = 18.0
-color = Color(0.902, 0.153, 0.157, 0.8)
-mouse_filter = 2
-
 [node name="PlayerMarker" type="TextureRect" parent="HUD/Root/ProgressTrack"]
 offset_left = 4.0
 offset_top = -3.0

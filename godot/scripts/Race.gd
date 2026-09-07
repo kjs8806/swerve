@@ -107,7 +107,6 @@ var combo_popup_timer: float = 0.0
 @onready var combo_panel: Control = $HUD/Root/ComboPanel
 @onready var combo_label: Label = $HUD/Root/ComboPanel/ComboLabel
 @onready var progress_track: Control = $HUD/Root/ProgressTrack
-@onready var progress_fill: ColorRect = $HUD/Root/ProgressTrack/ProgressFill
 @onready var player_marker: TextureRect = $HUD/Root/ProgressTrack/PlayerMarker
 @onready var turbo_gauge_track: Control = $HUD/Root/TurboGaugeTrack
 @onready var turbo_segments: Control = $HUD/Root/TurboGaugeTrack/TurboSegments
@@ -506,7 +505,6 @@ func _update_hud() -> void:
 	var marker_start := 3.0
 	var marker_end := track_w * 0.87 - player_marker.size.x
 	player_marker.position.x = lerpf(marker_start, marker_end, pct)
-	progress_fill.size.x = maxf(0.0, player_marker.position.x + player_marker.size.x * 0.5 - marker_start)
 
 	var gauge_pct: float = turbo_gauge / TURBO_GAUGE_MAX
 	var lit_count := ceili(gauge_pct * turbo_segments.get_child_count())
