@@ -45,6 +45,12 @@ const TURBO_RING_DURATION := 0.5
 const SPEED_LINE_ALPHA := 0.55
 const SPEED_LINE_PULSE_SPEED := 3.0
 
+# Coin pickup feedback: a quick punch on the HUD counter plus a brief
+# in-world sparkle at the exact pickup point.
+const COIN_PUNCH_DURATION := 0.18
+const COIN_PUNCH_SCALE := 1.35
+const COIN_PICKUP_FX_DURATION := 0.3
+
 const TEX_BACKGROUND := preload("res://assets/environment/ocean-sky.png")
 const TEX_GUARDRAILS := preload("res://assets/environment/guardrails.png")
 const TEX_PLAYER := preload("res://assets/vehicles/player-gray.png")
@@ -92,6 +98,8 @@ var win_flash: float = 0.0
 var shake_t: float = 0.0
 var turbo_ring_t: float = 0.0
 var turbo_flash_t: float = 0.0
+var coin_punch_t: float = 0.0
+var coin_pickups: Array = []
 var obstacles: Array = []
 var coins_list: Array = []
 var obstacle_timer: float = 0.0
@@ -224,6 +232,8 @@ func reset_game() -> void:
 	shake_t = 0.0
 	turbo_ring_t = 0.0
 	turbo_flash_t = 0.0
+	coin_punch_t = 0.0
+	coin_pickups.clear()
 	position = Vector2.ZERO
 	obstacles.clear()
 	coins_list.clear()
@@ -406,6 +416,12 @@ func _update_game(dt: float) -> void:
 		if c["lane"] == player_lane and c["p"] >= DANGER_ZONE_START and c["p"] < COLLIDE_AT + 0.05:
 			c["collected"] = true
 			coins += 1
+			coin_punch_t = COIN_PUNCH_DURATION
+			coin_pickups.append({
+				"pos": Vector2(lane_x(c["lane"], c["p"]), row_y(c["p"])),
+				"scale": scale_at(c["p"]),
+				"t": COIN_PICKUP_FX_DURATION,
+			})
 			if not is_turbo:
 				turbo_gauge = minf(TURBO_GAUGE_MAX, turbo_gauge + TURBO_GAIN_PER_COIN)
 				if turbo_gauge >= TURBO_GAUGE_MAX:
@@ -447,6 +463,11 @@ func _update_game(dt: float) -> void:
 		turbo_ring_t = maxf(0.0, turbo_ring_t - dt)
 	if turbo_flash_t > 0.0:
 		turbo_flash_t = maxf(0.0, turbo_flash_t - dt)
+	if coin_punch_t > 0.0:
+		coin_punch_t = maxf(0.0, coin_punch_t - dt)
+	for fx in coin_pickups:
+		fx["t"] -= dt
+	coin_pickups = coin_pickups.filter(func(fx): return fx["t"] > 0.0)
 
 	# Camera shake only ever offsets this Node2D, never the HUD (a separate
 	# CanvasLayer, immune to its parent's 2D transform) - so it can never
@@ -497,6 +518,9 @@ func _update_hud() -> void:
 	timer_mat.set_shader_parameter("color_mid", timer_grad[1])
 	timer_mat.set_shader_parameter("color_bottom", timer_grad[2])
 	coin_label.text = "%d" % coins
+	coin_label.pivot_offset = coin_label.size * 0.5
+	var coin_punch_frac: float = coin_punch_t / COIN_PUNCH_DURATION
+	coin_label.scale = Vector2.ONE * (1.0 + (COIN_PUNCH_SCALE - 1.0) * coin_punch_frac)
 	combo_label.text = "%dx" % combo
 	combo_panel.visible = combo > 0
 
@@ -567,6 +591,9 @@ func _draw() -> void:
 	draw_items.sort_custom(func(a, b): return a["p"] < b["p"])
 	for item in draw_items:
 		item["cb"].call()
+
+	for fx in coin_pickups:
+		_draw_coin_pickup_fx(fx)
 
 	if turbo_ring_t > 0.0:
 		_draw_turbo_ring(px, py)
@@ -703,6 +730,16 @@ func _draw_coin(pos: Vector2, scale: float) -> void:
 	var size := TEX_COIN.get_size() * scale
 	size.x *= spin
 	draw_texture_rect(TEX_COIN, Rect2(pos - size * 0.5, size), false)
+
+
+# Quick gold ring expanding from the exact pickup point - no dedicated
+# coin-sparkle asset exists yet, so this stays procedural (see coin.png's
+# own glow/spin for the baseline "approved" coin look this supplements).
+func _draw_coin_pickup_fx(fx: Dictionary) -> void:
+	var t: float = 1.0 - fx["t"] / COIN_PICKUP_FX_DURATION
+	var radius: float = lerp(4.0, 26.0, t) * fx["scale"]
+	var alpha: float = 1.0 - t
+	draw_arc(fx["pos"], radius, 0.0, TAU, 20, Color(1.0, 0.85, 0.3, alpha * 0.9), 3.0 * fx["scale"], true)
 
 
 func _draw_finish_tape(p: float) -> void:
