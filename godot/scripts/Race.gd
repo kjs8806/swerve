@@ -646,15 +646,27 @@ func _update_hud() -> void:
 	for i in range(turbo_segments.get_child_count()):
 		var segment := turbo_segments.get_child(i) as TextureRect
 		if i < lit_count:
-			var color_t := float(i) / float(maxi(1, turbo_segments.get_child_count() - 1))
-			segment.modulate = Color(1.0, lerpf(0.12, 0.95, color_t), 0.05, 1.0)
+			segment.modulate = _turbo_segment_color(i)
 		else:
-			segment.modulate = Color(0.12, 0.16, 0.22, 0.55)
+			segment.modulate = Color(0.11, 0.15, 0.21, 0.72)
 	if turbo_banner != null:
 		turbo_banner.visible = is_turbo
 	if is_turbo and turbo_banner != null:
 		var glow: float = 0.8 + 0.2 * sin(elapsed_t * 8.0)
 		turbo_banner.modulate = Color(glow, glow, glow, 1.0)
+
+
+# Match the approved mockup's deliberate stepped fill instead of tinting every
+# bar with a different interpolation value: 3 red, 4 orange, 3 amber, 2 yellow.
+func _turbo_segment_color(i: int) -> Color:
+	if i < 3:
+		return Color8(0xff, 0x24, 0x18)
+	elif i < 7:
+		return Color8(0xff, 0x78, 0x00)
+	elif i < 10:
+		return Color8(0xff, 0xc4, 0x00)
+	else:
+		return Color8(0xff, 0xf2, 0x00)
 
 
 # ---------- Rendering ----------
