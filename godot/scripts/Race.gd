@@ -35,14 +35,15 @@ const FINISH_REVEAL_RANGE := ROAD_LENGTH * 2.5
 
 const LANE_CHANGE_TIME := 0.14
 
-# Impact/turbo feedback - kept brief and geometrically confined (see
-# _draw_speed_lines/_draw_turbo_ring) so they read clearly without ever
-# covering a lane or disabling input.
+# Impact/turbo feedback - kept brief, low-alpha, and/or geometrically
+# confined (see _draw_turbo_ring/_draw_turbo_flash/_draw_speed_lines) so
+# they read clearly without ever covering a lane or disabling input.
 const SHAKE_DURATION := 0.22
 const SHAKE_MAGNITUDE := 9.0
+const TURBO_FLASH_DURATION := 0.28
 const TURBO_RING_DURATION := 0.5
-const SPEED_LINE_COUNT := 10
-const SPEED_LINE_BAND := 0.42
+const SPEED_LINE_ALPHA := 0.55
+const SPEED_LINE_PULSE_SPEED := 3.0
 
 const TEX_BACKGROUND := preload("res://assets/environment/ocean-sky.png")
 const TEX_GUARDRAILS := preload("res://assets/environment/guardrails.png")
@@ -56,6 +57,12 @@ const TRAFFIC_TEXTURES := [
 ]
 const TEX_COIN := preload("res://assets/collectibles/coin.png")
 const TEX_TURBO_SEGMENT := preload("res://assets/hud/turbo-segment.png")
+
+# Approved turbo-effect sprites.
+const TEX_TURBO_EXHAUST := preload("res://assets/effects/turbo-exhaust-flames.png")
+const TEX_TURBO_RING := preload("res://assets/effects/turbo-energy-ring.png")
+const TEX_TURBO_FLASH := preload("res://assets/effects/turbo-activation-flash.png")
+const TEX_TURBO_SPEED_LINES := preload("res://assets/effects/turbo-speed-lines.png")
 const HAZARD_TEXTURES := [
 	preload("res://assets/obstacles/pothole.png"),
 	preload("res://assets/obstacles/loose-tire.png"),
@@ -84,6 +91,7 @@ var hit_flash: float = 0.0
 var win_flash: float = 0.0
 var shake_t: float = 0.0
 var turbo_ring_t: float = 0.0
+var turbo_flash_t: float = 0.0
 var obstacles: Array = []
 var coins_list: Array = []
 var obstacle_timer: float = 0.0
@@ -216,6 +224,7 @@ func reset_game() -> void:
 	win_flash = 0.0
 	shake_t = 0.0
 	turbo_ring_t = 0.0
+	turbo_flash_t = 0.0
 	position = Vector2.ZERO
 	obstacles.clear()
 	coins_list.clear()
@@ -404,6 +413,7 @@ func _update_game(dt: float) -> void:
 					is_turbo = true
 					invincible = true
 					turbo_ring_t = TURBO_RING_DURATION
+					turbo_flash_t = TURBO_FLASH_DURATION
 					popup_combo("TURBO!", Color(1.0, 0.478, 0.102))
 
 	coins_list = coins_list.filter(func(c): return not c["collected"] and c["p"] < REMOVE_AT)
@@ -436,6 +446,8 @@ func _update_game(dt: float) -> void:
 		shake_t = maxf(0.0, shake_t - dt)
 	if turbo_ring_t > 0.0:
 		turbo_ring_t = maxf(0.0, turbo_ring_t - dt)
+	if turbo_flash_t > 0.0:
+		turbo_flash_t = maxf(0.0, turbo_flash_t - dt)
 
 	# Camera shake only ever offsets this Node2D, never the HUD (a separate
 	# CanvasLayer, immune to its parent's 2D transform) - so it can never
@@ -560,6 +572,8 @@ func _draw() -> void:
 
 	if turbo_ring_t > 0.0:
 		_draw_turbo_ring(px, py)
+	if turbo_flash_t > 0.0:
+		_draw_turbo_flash(px, py)
 
 	var sz := get_viewport_rect().size
 	if hit_flash > 0.0:
@@ -719,54 +733,52 @@ func _draw_finish_tape(p: float) -> void:
 	draw_string(font, text_pos, "FINISH", HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, Color.WHITE)
 
 
-# Twin exhaust flames either side of the player's rear, rather than one
-# center flame, so it reads as coming from the car's exhaust pipes.
-const FLAME_SPREAD := 11.0
+# Approved twin-exhaust-flame sprite (already a matched left/right pair in
+# one image) anchored just behind the player's rear, scaled off the car's
+# own perspective scale so it shrinks/grows with the car.
+const FLAME_TEX_SCALE := 0.34
 
 func _draw_flame_trail(pos: Vector2, scale: float, t: float) -> void:
-	var flicker: float = 0.7 + 0.3 * sin(t * 30.0)
-	var origin: Vector2 = pos + Vector2(0, 30.0 * scale)
-	for side in [-1.0, 1.0]:
-		var fx: float = side * FLAME_SPREAD * scale
-		var pts := PackedVector2Array([
-			origin + Vector2(fx - 6.0 * scale, 0),
-			origin + Vector2(fx + 6.0 * scale, 0),
-			origin + Vector2(fx, 24.0 * scale * flicker),
-		])
-		var colors := PackedColorArray([
-			Color(1.0, 0.949, 0.769, flicker),
-			Color(1.0, 0.949, 0.769, flicker),
-			Color(1.0, 0.376, 0.0, 0.0),
-		])
-		draw_polygon(pts, colors)
+	var flicker: float = 0.82 + 0.18 * sin(t * 30.0)
+	var size: Vector2 = TEX_TURBO_EXHAUST.get_size() * (FLAME_TEX_SCALE * scale)
+	var origin: Vector2 = pos + Vector2(0.0, 26.0 * scale)
+	draw_texture_rect(TEX_TURBO_EXHAUST, Rect2(origin - Vector2(size.x * 0.5, 0.0), size), false, Color(1, 1, 1, flicker))
 
 
-# Radial burst that marks the exact moment turbo activates, fading out over
+# Approved energy-ring sprite, scaled up and faded out over
 # TURBO_RING_DURATION - centered on the player so it reads as "bursting
 # outward from the car" rather than a generic screen-wide flash.
+const RING_TEX_MIN_SCALE := 0.2
+const RING_TEX_MAX_SCALE := 1.0
+
 func _draw_turbo_ring(px: float, py: float) -> void:
 	var t: float = 1.0 - turbo_ring_t / TURBO_RING_DURATION
-	var radius: float = lerp(18.0, 200.0, t)
+	var scale: float = lerp(RING_TEX_MIN_SCALE, RING_TEX_MAX_SCALE, t)
 	var alpha: float = 1.0 - t
-	draw_arc(Vector2(px, py), radius, 0.0, TAU, 48, Color(1.0, 0.68, 0.15, alpha * 0.75), 6.0, true)
+	var size: Vector2 = TEX_TURBO_RING.get_size() * scale
+	draw_texture_rect(TEX_TURBO_RING, Rect2(Vector2(px, py) - size * 0.5, size), false, Color(1, 1, 1, alpha))
 
 
-# Streaks anchored to each row's own road edge and drawn outward from
-# there, so by construction they can never land inside a lane or over a
-# hazard/traffic sprite - they only ever occupy the guardrail/background
-# margin beyond the drivable road.
+# Approved activation-flash sprite - kept small and quick (TURBO_FLASH_DURATION)
+# so the burst reads as a hit of energy without ever covering nearby lanes.
+const FLASH_TEX_SCALE := 0.32
+
+func _draw_turbo_flash(px: float, py: float) -> void:
+	var t: float = 1.0 - turbo_flash_t / TURBO_FLASH_DURATION
+	var scale: float = lerp(0.5, 1.0, t) * FLASH_TEX_SCALE
+	var alpha: float = 1.0 - t
+	var size: Vector2 = TEX_TURBO_FLASH.get_size() * scale
+	draw_texture_rect(TEX_TURBO_FLASH, Rect2(Vector2(px, py) - size * 0.5, size), false, Color(1, 1, 1, alpha))
+
+
+# Approved speed-line burst, stretched to cover the viewport - the art
+# itself is mostly negative space between rays, so traffic/hazards stay
+# readable through the gaps rather than being covered by a solid layer.
+# Alpha is tied to the remaining turbo gauge (not just is_turbo) so it
+# tapers off smoothly as turbo drains instead of vanishing on the frame
+# is_turbo flips false.
 func _draw_speed_lines(t: float) -> void:
-	var h := get_h()
-	var hy := horizon_y()
-	var cx := center_x()
-	var band_bottom: float = lerp(hy, h, SPEED_LINE_BAND)
-	for i in range(SPEED_LINE_COUNT):
-		var side: float = -1.0 if i % 2 == 0 else 1.0
-		var seed: float = float(i) * 12.9898
-		var phase: float = fmod(t * 2.6 + seed * 0.37, 1.0)
-		var y: float = lerp(hy, band_bottom, phase)
-		var reach: float = lerp(0.0, get_w() * 0.5, phase)
-		var x0: float = cx + side * (road_half_width(y) + 10.0)
-		var x1: float = x0 + side * reach * 0.5
-		var alpha: float = sin(phase * PI) * 0.55
-		draw_line(Vector2(x0, y), Vector2(x1, y), Color(1, 1, 1, alpha), 3.0)
+	var pulse: float = 0.85 + 0.15 * sin(t * SPEED_LINE_PULSE_SPEED)
+	var fade_out: float = clampf(turbo_gauge / (TURBO_GAUGE_MAX * 0.15), 0.0, 1.0)
+	var alpha: float = SPEED_LINE_ALPHA * pulse * fade_out
+	draw_texture_rect(TEX_TURBO_SPEED_LINES, Rect2(0, 0, get_w(), get_h()), false, Color(1, 1, 1, alpha))
