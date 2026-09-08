@@ -81,10 +81,14 @@ const TEX_GUARDRAILS := preload("res://assets/environment/guardrails.png")
 const HD_VEHICLE_SCALE := 0.45
 const VEHICLE_ANGLE_FRAME_COUNT := 5
 const TEX_PLAYER_ANGLE_SHEET := preload("res://assets/vehicles/player-gray-angle-sheet.png")
-# Prototype: use one approved red traffic identity across every spawn until
-# the multi-color angle sheets are approved.
+# Every traffic paint variant uses the same approved subtle five-angle geometry.
+# Spawning already chooses uniformly from this array, so all variants can appear.
 const TRAFFIC_ANGLE_SHEETS := [
+	preload("res://assets/vehicles/traffic-blue-angle-sheet.png"),
 	preload("res://assets/vehicles/traffic-red-angle-sheet.png"),
+	preload("res://assets/vehicles/traffic-green-angle-sheet.png"),
+	preload("res://assets/vehicles/traffic-orange-angle-sheet.png"),
+	preload("res://assets/vehicles/traffic-yellow-angle-sheet.png"),
 ]
 const TEX_COIN := preload("res://assets/collectibles/coin.png")
 # coin.png is a large-source HD circle (not sized 1:1 for the road), so its
