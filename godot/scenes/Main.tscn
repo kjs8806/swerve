@@ -1,4 +1,4 @@
-[gd_scene load_steps=19 format=3]
+[gd_scene load_steps=21 format=3]
 
 [ext_resource type="Script" path="res://scripts/Race.gd" id="1"]
 [ext_resource type="Texture2D" path="res://assets/hud/coin-frame.png" id="2_coin"]
@@ -14,6 +14,8 @@
 [ext_resource type="FontFile" path="res://assets/fonts/RacingSansOne-Regular.ttf" id="12_combo_font"]
 [ext_resource type="Texture2D" path="res://assets/hud/pause-button.png" id="13_pause"]
 [ext_resource type="Texture2D" path="res://assets/hud/progress-marker-glow.png" id="14_glow"]
+[ext_resource type="Texture2D" path="res://assets/hud/steer-left-pressed.png" id="15_left_pressed"]
+[ext_resource type="Texture2D" path="res://assets/hud/steer-right-pressed.png" id="16_right_pressed"]
 
 [sub_resource type="FontVariation" id="FontVariation_extrabold"]
 base_font = ExtResource("10_display_font")
@@ -272,7 +274,9 @@ offset_left = 14.0
 offset_top = -202.0
 offset_right = 305.2
 offset_bottom = -20.0
+pivot_offset = Vector2(145.6, 91.0)
 texture_normal = ExtResource("8_left")
+texture_pressed = ExtResource("15_left_pressed")
 ignore_texture_size = true
 stretch_mode = 5
 
@@ -286,7 +290,9 @@ offset_left = -305.2
 offset_top = -202.0
 offset_right = -14.0
 offset_bottom = -20.0
+pivot_offset = Vector2(145.6, 91.0)
 texture_normal = ExtResource("9_right")
+texture_pressed = ExtResource("16_right_pressed")
 ignore_texture_size = true
 stretch_mode = 5
 

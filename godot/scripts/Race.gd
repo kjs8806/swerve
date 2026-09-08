@@ -201,6 +201,10 @@ func _ready() -> void:
 	_build_turbo_segments()
 	btn_left.pressed.connect(func(): try_swerve(-1))
 	btn_right.pressed.connect(func(): try_swerve(1))
+	btn_left.button_down.connect(func(): _set_steer_btn_pressed_visual(btn_left, true))
+	btn_left.button_up.connect(func(): _set_steer_btn_pressed_visual(btn_left, false))
+	btn_right.button_down.connect(func(): _set_steer_btn_pressed_visual(btn_right, true))
+	btn_right.button_up.connect(func(): _set_steer_btn_pressed_visual(btn_right, false))
 	overlay_button.pressed.connect(func(): reset_game(true))
 	pause_button.pressed.connect(_toggle_pause)
 	set_process_unhandled_key_input(true)
@@ -370,6 +374,24 @@ func _toggle_pause() -> void:
 	elif state == State.PAUSED:
 		state = State.PLAYING
 		pause_button.texture_normal = TEX_PAUSE_ICON
+
+
+# On top of TextureButton's own pressed-texture swap, punch the button down
+# in scale and brighten it while held, then spring back on release, so it
+# reads as a physical button being pressed rather than just an icon swap.
+func _set_steer_btn_pressed_visual(btn: TextureButton, pressed: bool) -> void:
+	if btn.has_meta("press_tween"):
+		var existing: Tween = btn.get_meta("press_tween")
+		if existing != null and existing.is_valid():
+			existing.kill()
+	var tween := create_tween()
+	btn.set_meta("press_tween", tween)
+	if pressed:
+		tween.tween_property(btn, "scale", Vector2.ONE * 0.90, 0.05).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tween.parallel().tween_property(btn, "modulate:a", 0.85, 0.05)
+	else:
+		tween.tween_property(btn, "scale", Vector2.ONE, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tween.parallel().tween_property(btn, "modulate:a", 0.5, 0.12)
 
 
 func base_speed() -> float:
