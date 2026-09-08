@@ -76,13 +76,12 @@ const COMBO_BADGE_PEAK_SCALE := COMBO_BADGE_SCALE * 1.12
 const TEX_BACKGROUND := preload("res://assets/environment/ocean-sky.png")
 const TEX_GUARDRAILS := preload("res://assets/environment/guardrails.png")
 const HD_VEHICLE_SCALE := 0.30
-const TEX_PLAYER := preload("res://assets/vehicles/player-gray-hd.png")
-const TRAFFIC_TEXTURES := [
-	preload("res://assets/vehicles/traffic-coral-hd.png"),
-	preload("res://assets/vehicles/traffic-yellow-hd.png"),
-	preload("res://assets/vehicles/traffic-blue-hd.png"),
-	preload("res://assets/vehicles/traffic-green-hd.png"),
-	preload("res://assets/vehicles/traffic-orange-hd.png"),
+const VEHICLE_ANGLE_FRAME_COUNT := 5
+const TEX_PLAYER_ANGLE_SHEET := preload("res://assets/vehicles/player-gray-angle-sheet.png")
+# Prototype: use one approved red traffic identity across every spawn until
+# the multi-color angle sheets are approved.
+const TRAFFIC_ANGLE_SHEETS := [
+	preload("res://assets/vehicles/traffic-red-angle-sheet.png"),
 ]
 const TEX_COIN := preload("res://assets/collectibles/coin.png")
 const TEX_TURBO_PICKUP := preload("res://assets/collectibles/turbo-pickup.png")
@@ -457,7 +456,7 @@ func _spawn_obstacle_wave() -> void:
 			"lane": free_lanes[i], "p": 0.0, "resolved": false,
 			"dodged": false, "was_near": false,
 			"kind": "hazard" if is_hazard else "traffic",
-			"variant": randi() % (HAZARD_TEXTURES.size() if is_hazard else TRAFFIC_TEXTURES.size()),
+			"variant": randi() % (HAZARD_TEXTURES.size() if is_hazard else TRAFFIC_ANGLE_SHEETS.size()),
 		})
 
 
@@ -747,7 +746,7 @@ func _draw() -> void:
 	draw_items.append({"p": 1.001, "cb": func():
 		if turbo_now:
 			_draw_flame_trail(Vector2(px, py), p_scale, t_now, player_rotation)
-		_draw_sprite_on_road(TEX_PLAYER, Vector2(px, py), p_scale * HD_VEHICLE_SCALE, 1.0, player_rotation, 0.34)
+		_draw_angle_sprite_on_road(TEX_PLAYER_ANGLE_SHEET, _angle_frame_for_lane(player_lane_visual), Vector2(px, py), p_scale * HD_VEHICLE_SCALE, 1.0, 0.34)
 	})
 
 	draw_items.sort_custom(func(a, b): return a["p"] < b["p"])
@@ -868,6 +867,21 @@ func _draw_sprite_on_road(texture: Texture2D, pos: Vector2, scale: float, p: flo
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
+func _angle_frame_for_lane(lane_index: float) -> int:
+	return clampi(int(round(lane_index)), 0, VEHICLE_ANGLE_FRAME_COUNT - 1)
+
+
+func _draw_angle_sprite_on_road(sheet: Texture2D, frame_index: int, pos: Vector2, scale: float, p: float, shadow_strength: float = 0.0, vertical_scale: float = 1.0) -> void:
+	var frame_width: float = sheet.get_width() / float(VEHICLE_ANGLE_FRAME_COUNT)
+	var frame_size := Vector2(frame_width, float(sheet.get_height()))
+	var rendered_size: Vector2 = frame_size * scale
+	rendered_size.y *= vertical_scale
+	if shadow_strength > 0.0:
+		_draw_road_shadow(pos, rendered_size, p, shadow_strength)
+	var source := Rect2(Vector2(frame_width * frame_index, 0.0), frame_size)
+	draw_texture_rect_region(sheet, Rect2(pos - rendered_size * 0.5, rendered_size), source, _depth_tint(p))
+
+
 func _draw_sprite_centered(texture: Texture2D, pos: Vector2, scale: float) -> void:
 	var size: Vector2 = texture.get_size() * scale
 	draw_texture_rect(texture, Rect2(pos - size * 0.5, size), false)
@@ -887,7 +901,7 @@ func _draw_obstacle(obstacle: Dictionary) -> void:
 		_draw_sprite_on_road(HAZARD_TEXTURES[variant], pos, visual_scale * HD_HAZARD_SCALE, p, rotation, shadow, flatness)
 	else:
 		var car_flatness: float = lerpf(0.88, 1.0, depth)
-		_draw_sprite_on_road(TRAFFIC_TEXTURES[obstacle["variant"]], pos, visual_scale * HD_VEHICLE_SCALE, p, rotation, 0.32, car_flatness)
+		_draw_angle_sprite_on_road(TRAFFIC_ANGLE_SHEETS[obstacle["variant"]], _angle_frame_for_lane(lane), pos, visual_scale * HD_VEHICLE_SCALE, p, 0.32, car_flatness)
 
 
 func _draw_sky(w: float, hy: float) -> void:
