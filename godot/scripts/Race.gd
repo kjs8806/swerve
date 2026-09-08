@@ -286,8 +286,19 @@ func lane_fraction(lane_index: float) -> float:
 	var blend: float = lane_index - floor(lane_index)
 	return lerpf(_lane_center_fraction(lo), _lane_center_fraction(hi), blend)
 
+func road_half_width_at_y(screen_y: float) -> float:
+	# The visible road edges are linear between the horizon and screen bottom.
+	# Deriving width from screen Y keeps road objects on the same center axes.
+	var hy: float = horizon_y()
+	var road_height: float = maxf(1.0, get_h() - hy)
+	var screen_depth: float = (screen_y - hy) / road_height
+	return lerpf(half_width_at(0.0), half_width_at(1.0), screen_depth)
+
+
 func lane_x(lane_index: float, p: float) -> float:
-	return center_x() + lane_fraction(lane_index) * half_width_at(p)
+	var screen_y: float = row_y(p)
+	return center_x() + lane_fraction(lane_index) * road_half_width_at_y(screen_y)
+
 
 func row_y(p: float) -> float:
 	return lerp(horizon_y(), player_row_y(), ease_p(p))
