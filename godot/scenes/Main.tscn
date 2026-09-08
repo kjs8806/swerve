@@ -1,4 +1,4 @@
-[gd_scene load_steps=17 format=3]
+[gd_scene load_steps=18 format=3]
 
 [ext_resource type="Script" path="res://scripts/Race.gd" id="1"]
 [ext_resource type="Texture2D" path="res://assets/hud/coin-frame.png" id="2_coin"]
@@ -12,6 +12,7 @@
 [ext_resource type="FontFile" path="res://assets/fonts/Rajdhani-Bold.ttf" id="10_display_font"]
 [ext_resource type="Shader" path="res://shaders/gradient_text.gdshader" id="11_grad_shader"]
 [ext_resource type="FontFile" path="res://assets/fonts/RacingSansOne-Regular.ttf" id="12_combo_font"]
+[ext_resource type="Texture2D" path="res://assets/hud/pause-button.png" id="13_pause"]
 
 [sub_resource type="FontVariation" id="FontVariation_extrabold"]
 base_font = ExtResource("10_display_font")
@@ -88,9 +89,9 @@ vertical_alignment = 1
 anchor_left = 0.5
 anchor_right = 0.5
 offset_left = -180.0
-offset_top = 41.0
+offset_top = 44.0
 offset_right = 180.0
-offset_bottom = 86.0
+offset_bottom = 89.0
 mouse_filter = 2
 
 [node name="ProgressTrackArt" type="TextureRect" parent="HUD/Root/ProgressTrack"]
@@ -140,6 +141,17 @@ text = "0"
 horizontal_alignment = 1
 vertical_alignment = 1
 offset_right = -8.0
+
+[node name="PauseButton" type="TextureButton" parent="HUD/Root"]
+visible = false
+offset_left = 197.0
+offset_top = 6.0
+offset_right = 257.0
+offset_bottom = 66.0
+texture_normal = ExtResource("13_pause")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
 
 [node name="ComboPanel" type="Control" parent="HUD/Root"]
 anchor_left = 1.0

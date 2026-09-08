@@ -39,6 +39,11 @@ const COLLIDE_AT := 0.97
 const PASS_AT := 1.08
 const REMOVE_AT := 1.6
 const FINISH_REVEAL_RANGE := ROAD_LENGTH * 2.5
+# Thickness of the painted finish-line checkers, expressed in the same
+# depth units as `p` (rather than fixed screen pixels) so the stripe is
+# drawn as a perspective-correct trapezoid that always matches the road's
+# own width at both its near and far edge instead of overhanging it.
+const FINISH_STRIPE_P_THICKNESS := 0.10
 
 const LANE_CHANGE_TIME := 0.14
 
@@ -104,9 +109,10 @@ const HAZARD_TEXTURES := [
 	preload("res://assets/obstacles/loose-tire-hd.png"),
 	preload("res://assets/obstacles/traffic-cone-hd.png"),
 ]
-const FINISH_TAPE_FONT := preload("res://assets/fonts/Rajdhani-Bold.ttf")
+const TEX_PAUSE_ICON := preload("res://assets/hud/pause-button.png")
+const TEX_RESUME_ICON := preload("res://assets/hud/resume-button.png")
 
-enum State { READY, PLAYING, WIN, LOSE }
+enum State { READY, PLAYING, PAUSED, WIN, LOSE }
 
 # ---------- State ----------
 var state: int = State.READY
@@ -164,6 +170,7 @@ var audio_controller
 @onready var combo_popup: Label = $HUD/Root/ComboPopup
 @onready var btn_left: TextureButton = $HUD/Root/BtnLeft
 @onready var btn_right: TextureButton = $HUD/Root/BtnRight
+@onready var pause_button: TextureButton = $HUD/Root/PauseButton
 @onready var overlay: Control = $HUD/Root/Overlay
 @onready var overlay_title: Label = $HUD/Root/Overlay/OverlayCard/OverlayTitle
 @onready var overlay_subtitle: Label = $HUD/Root/Overlay/OverlayCard/OverlaySubtitle
@@ -187,6 +194,7 @@ func _ready() -> void:
 	btn_left.pressed.connect(func(): try_swerve(-1))
 	btn_right.pressed.connect(func(): try_swerve(1))
 	overlay_button.pressed.connect(func(): reset_game(true))
+	pause_button.pressed.connect(_toggle_pause)
 	set_process_unhandled_key_input(true)
 
 
@@ -323,7 +331,18 @@ func reset_game(play_ui_tap: bool = false) -> void:
 	coin_timer = 0.9
 	turbo_spawn_timer = randf_range(TURBO_SPAWN_MIN, TURBO_SPAWN_MAX)
 	overlay.visible = false
+	pause_button.visible = true
+	pause_button.texture_normal = TEX_PAUSE_ICON
 	_audio_call(&"begin_race", [play_ui_tap])
+
+
+func _toggle_pause() -> void:
+	if state == State.PLAYING:
+		state = State.PAUSED
+		pause_button.texture_normal = TEX_RESUME_ICON
+	elif state == State.PAUSED:
+		state = State.PLAYING
+		pause_button.texture_normal = TEX_PAUSE_ICON
 
 
 func base_speed() -> float:
@@ -686,6 +705,7 @@ func _update_game(dt: float) -> void:
 
 func _show_end_screen(won: bool) -> void:
 	overlay.visible = true
+	pause_button.visible = false
 	overlay_title.text = "FINISH!" if won else "TIME UP"
 	overlay_subtitle.text = ("You crossed the finish line in time." if won
 		else "You didn't reach the finish line before the clock ran out.")
@@ -1089,55 +1109,36 @@ func _draw_turbo_pickup(pickup: Dictionary) -> void:
 
 
 func _draw_finish_tape(p: float) -> void:
-	var y := row_y(p)
 	var scale := scale_at(p)
 	var cx := center_x()
-	var hw: float = half_width_at(p) * (1.0 + 1.0 / (LANES - 1))
-	var band_h: float = 26.0 * scale
-	var trim_h: float = 4.0 * scale
-	var pole_w: float = 7.0 * scale
-	var banner_h: float = band_h + trim_h * 2.0
-	var pole_h: float = banner_h + 16.0 * scale
-	var cap_r: float = pole_w * 1.15
 
-	var left_pole_x := cx - hw - pole_w
-	var right_pole_x := cx + hw
-	var pole_top := y - pole_h
+	# The checkers are drawn as a perspective-correct trapezoid spanning a
+	# thin slice of depth (p0..p1) rather than a flat rectangle, so its near
+	# and far edges each hug the road's own width at that depth instead of
+	# overhanging it once the stripe gets thick.
+	var half_pt: float = FINISH_STRIPE_P_THICKNESS * 0.5
+	var p0: float = maxf(0.0, p - half_pt)
+	var p1: float = p + half_pt
+	var y0 := row_y(p0)
+	var y1 := row_y(p1)
+	var hw0 := half_width_at(p0)
+	var hw1 := half_width_at(p1)
 
-	# soft contact shadow beneath the whole banner assembly, for depth
-	draw_rect(Rect2(left_pole_x - 2.0 * scale, y - banner_h + 5.0 * scale,
-		(right_pole_x + pole_w + 2.0 * scale) - (left_pole_x - 2.0 * scale), banner_h),
-		Color(0, 0, 0, 0.20))
+	var gcols := 20
+	for i in range(gcols):
+		var t0: float = float(i) / gcols
+		var t1: float = float(i + 1) / gcols
+		var quad := PackedVector2Array([
+			Vector2(cx - hw0 + t0 * hw0 * 2.0, y0), Vector2(cx - hw0 + t1 * hw0 * 2.0, y0),
+			Vector2(cx - hw1 + t1 * hw1 * 2.0, y1), Vector2(cx - hw1 + t0 * hw1 * 2.0, y1),
+		])
+		var gcol: Color = Color8(0x14, 0x14, 0x17) if i % 2 == 0 else Color8(0xf2, 0xf2, 0xf2)
+		draw_colored_polygon(quad, gcol)
 
-	# poles: brushed-steel look (dark body + bright highlight stripe) with a
-	# gold finial cap, rather than a flat single-tone rectangle
-	for pole_x in [left_pole_x, right_pole_x]:
-		draw_rect(Rect2(pole_x, pole_top, pole_w, pole_h), Color8(0x33, 0x36, 0x3d))
-		draw_rect(Rect2(pole_x + pole_w * 0.6, pole_top, pole_w * 0.2, pole_h), Color8(0x9a, 0xa1, 0xad))
-		draw_circle(Vector2(pole_x + pole_w * 0.5, pole_top), cap_r, Color8(0xff, 0xcf, 0x4d))
-		draw_circle(Vector2(pole_x + pole_w * 0.5, pole_top), cap_r, Color(0, 0, 0, 0.35), false, 1.5 * scale)
-
-	# gold trim frames the checkered field top and bottom
-	draw_rect(Rect2(cx - hw, y - banner_h, hw * 2.0, trim_h), Color8(0xff, 0xc9, 0x3c))
-	draw_rect(Rect2(cx - hw, y - trim_h, hw * 2.0, trim_h), Color8(0xff, 0xc9, 0x3c))
-
-	var cols := 18
-	var cw: float = (hw * 2.0) / cols
-	for i in range(cols):
-		var col: Color = Color8(0x14, 0x16, 0x1c) if i % 2 == 0 else Color8(0xf7, 0xf7, 0xf7)
-		draw_rect(Rect2(cx - hw + i * cw, y - banner_h + trim_h, cw, band_h), col)
-
-	# crisp dark frame around the whole banner ties the trim and checkers together
-	draw_rect(Rect2(cx - hw, y - banner_h, hw * 2.0, banner_h), Color(0, 0, 0, 0.55), false, 2.0 * scale)
-
-	var font := FINISH_TAPE_FONT
-	var font_size: int = int(18 * scale)
-	var label := "FINISH"
-	var text_w := font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size).x
-	var text_pos := Vector2(cx - text_w / 2.0, y - banner_h + trim_h + band_h / 2.0 + 6.5 * scale)
-	draw_string_outline(font, text_pos + Vector2(1.0, 1.5) * scale, label, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, maxi(2, int(3 * scale)), Color(0, 0, 0, 0.35))
-	draw_string_outline(font, text_pos, label, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, maxi(2, int(4 * scale)), Color(0, 0, 0, 0.9))
-	draw_string(font, text_pos, label, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, Color8(0xff, 0xdd, 0x77))
+	var outline := PackedVector2Array([
+		Vector2(cx - hw0, y0), Vector2(cx + hw0, y0), Vector2(cx + hw1, y1), Vector2(cx - hw1, y1), Vector2(cx - hw0, y0),
+	])
+	draw_polyline(outline, Color(0, 0, 0, 0.45), 1.5 * scale)
 
 
 # Approved twin-exhaust-flame sprite (already a matched left/right pair in
