@@ -1,0 +1,93 @@
+name: Export Web (GitHub Pages)
+
+# Builds an HTML5/WebAssembly export from godot/ and publishes it to
+# GitHub Pages. Requires the repository's Settings -> Pages -> "Build and
+# deployment" source to be set to "GitHub Actions" once - this workflow
+# does not (and cannot) change that setting itself.
+#
+# Manual run: use the "Run workflow" button on the Actions tab.
+# Automatic run: pushing to the branch below, or pushing a tag like "v1.0.0".
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "claude/mobile-game-design-7pzuyq"
+    tags:
+      - "v*"
+
+env:
+  GODOT_VERSION: 4.3-stable
+  # Directory name Godot's own export-template lookup expects locally -
+  # intentionally NOT the same string as GODOT_VERSION above (dot, not
+  # hyphen, before "stable").
+  GODOT_TEMPLATE_DIR: 4.3.stable
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one Pages deployment at a time; let an in-flight one finish rather
+# than cancel it mid-publish.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  export-web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Godot editor
+        run: |
+          curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          unzip -q godot.zip
+          chmod +x "Godot_v${GODOT_VERSION}_linux.x86_64"
+          sudo mv "Godot_v${GODOT_VERSION}_linux.x86_64" /usr/local/bin/godot
+
+      - name: Smoke-test game startup
+        run: |
+          set -o pipefail
+          godot --headless --editor --path godot --quit
+          timeout 8s godot --headless --path godot --quit-after 3 2>&1 | tee /tmp/godot-startup.log
+          if grep -E "SCRIPT ERROR|Parse Error|Invalid access|Invalid call|Failed to load script|Failed loading scene|Node not found" /tmp/godot-startup.log; then
+            echo "Godot startup errors detected"
+            exit 1
+          fi
+
+      - name: Download and install Godot export templates
+        run: |
+          mkdir -p "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_DIR}"
+          curl -sSL -o templates.tpz "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz"
+          unzip -q templates.tpz -d /tmp/templates_extracted
+          mv /tmp/templates_extracted/templates/* "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_DIR}/"
+
+      - name: Export Web build
+        working-directory: godot
+        run: |
+          mkdir -p builds/web
+          godot --headless --export-release "Web" builds/web/index.html
+
+      - name: Disable Jekyll processing on Pages
+        run: touch godot/builds/web/.nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: godot/builds/web
+
+  deploy:
+    needs: export-web
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
