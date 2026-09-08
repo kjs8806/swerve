@@ -808,19 +808,13 @@ func _draw_road() -> void:
 	var top_half := half_width_at(0.0)
 	var bot_half := half_width_at(1.0)
 
-	# Road surface: dark base + a lighter center band for a subtle
-	# crowned-asphalt look instead of one flat fill.
+	# One uniform asphalt surface across all five lanes. Keeping the fill
+	# edge-to-edge prevents the outer lanes from appearing shadowed.
 	var poly := PackedVector2Array([
 		Vector2(cx - top_half, hy), Vector2(cx + top_half, hy),
 		Vector2(cx + bot_half, h), Vector2(cx - bot_half, h),
 	])
-	draw_colored_polygon(poly, Color8(0x2c, 0x30, 0x3d))
-	var inset := 0.72
-	var poly_hi := PackedVector2Array([
-		Vector2(cx - top_half * inset, hy), Vector2(cx + top_half * inset, hy),
-		Vector2(cx + bot_half * inset, h), Vector2(cx - bot_half * inset, h),
-	])
-	draw_colored_polygon(poly_hi, Color(0.28, 0.31, 0.4, 0.55))
+	draw_colored_polygon(poly, Color8(0x3a, 0x3f, 0x50))
 
 	for i in range(1, LANES):
 		var frac: float = LANE_EDGES[i]
