@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="LevelConfig" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/LevelConfig.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/environment/sydney-hd.png" id="2"]
+
+[resource]
+script = ExtResource("1")
+level_number = 1
+city_name = "Sydney"
+background_texture = ExtResource("2")
+base_speed_start = 120.0
+base_speed_ramp = 1.8
+base_speed_max = 220.0
+finish_distance = 8000.0
+race_time = 65.0
+obstacle_count_start = 1
+obstacle_count_max = 1
+obstacle_ramp_seconds = 55.0
+obstacle_interval_start = 2.1
+obstacle_interval_end = 1.45
+hazard_chance_start = 0.06
+hazard_chance_end = 0.14
+coin_interval_min = 0.75
+coin_interval_max = 1.25
+coin_run_min = 2
+coin_run_max = 4
+turbo_spawn_min = 4.5
+turbo_spawn_max = 6.5

@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="LevelConfig" load_steps=3 format=3]
+[ext_resource type="Script" path="res://scripts/LevelConfig.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/environment/tokyo-hd.png" id="2"]
+[resource]
+script = ExtResource("1")
+level_number = 10
+city_name = "Tokyo"
+background_texture = ExtResource("2")
+base_speed_start = 215.0
+base_speed_ramp = 3.8
+base_speed_max = 405.0
+finish_distance = 17600.0
+race_time = 58.0
+obstacle_count_start = 2
+obstacle_count_max = 3
+obstacle_ramp_seconds = 21.0
+obstacle_interval_start = 0.82
+obstacle_interval_end = 0.48
+hazard_chance_start = 0.26
+hazard_chance_end = 0.38
+coin_interval_min = 1.65
+coin_interval_max = 2.4
+coin_run_min = 1
+coin_run_max = 2
+turbo_spawn_min = 7.0
+turbo_spawn_max = 9.5

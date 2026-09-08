@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="LevelConfig" load_steps=3 format=3]
+[ext_resource type="Script" path="res://scripts/LevelConfig.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/environment/dubai-hd.png" id="2"]
+[resource]
+script = ExtResource("1")
+level_number = 7
+city_name = "Dubai"
+background_texture = ExtResource("2")
+base_speed_start = 180.0
+base_speed_ramp = 3.0
+base_speed_max = 340.0
+finish_distance = 14400.0
+race_time = 60.0
+obstacle_count_start = 1
+obstacle_count_max = 3
+obstacle_ramp_seconds = 30.0
+obstacle_interval_start = 1.14
+obstacle_interval_end = 0.65
+hazard_chance_start = 0.20
+hazard_chance_end = 0.31
+coin_interval_min = 1.4
+coin_interval_max = 2.1
+coin_run_min = 1
+coin_run_max = 3
+turbo_spawn_min = 6.3
+turbo_spawn_max = 8.8

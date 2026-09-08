@@ -12,9 +12,23 @@ godot4 --path godot/
 ```
 
 `scripts/Race.gd` holds the game state, update loop, five-lane perspective
-grid, spawning, collision logic, and rendering. `scenes/Main.tscn` holds
-the HUD and wires up the swerve/restart buttons. Approved production art
-is stored under `assets/` and is drawn on the existing depth-sorted road.
+grid, spawning, collision logic, and rendering. The ten data-driven race
+profiles live in `levels/` as `LevelConfig` resources and are exposed by
+`scripts/LevelCatalog.gd`. `scenes/LevelSelect.tscn` presents the city grid.
+
+Progression is sequential: completing level N unlocks level N+1. The highest
+unlocked level is stored in `user://progress.cfg`; deleting that file resets
+progress without affecting other settings.
+
+`scenes/Main.tscn` holds the HUD and wires up the swerve/restart buttons.
+Approved production art is stored under `assets/` and is drawn on the existing
+depth-sorted road.
 
 All five lanes are equal width (20% each). Traffic and hazards are always
 spawned on the corresponding mathematical lane centers.
+
+Run the level balance invariant check with:
+
+```
+godot4 --headless --path godot --script res://tools/validate_levels.gd
+```

@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="LevelConfig" load_steps=3 format=3]
+[ext_resource type="Script" path="res://scripts/LevelConfig.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/environment/singapore-hd.png" id="2"]
+[resource]
+script = ExtResource("1")
+level_number = 5
+city_name = "Singapore"
+background_texture = ExtResource("2")
+base_speed_start = 160.0
+base_speed_ramp = 2.6
+base_speed_max = 300.0
+finish_distance = 12000.0
+race_time = 61.0
+obstacle_count_start = 1
+obstacle_count_max = 2
+obstacle_ramp_seconds = 38.0
+obstacle_interval_start = 1.36
+obstacle_interval_end = 0.80
+hazard_chance_start = 0.16
+hazard_chance_end = 0.27
+coin_interval_min = 1.2
+coin_interval_max = 1.9
+coin_run_min = 1
+coin_run_max = 3
+turbo_spawn_min = 5.8
+turbo_spawn_max = 8.2
