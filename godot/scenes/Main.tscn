@@ -114,9 +114,9 @@ stretch_mode = 5
 mouse_filter = 2
 
 [node name="CoinPanel" type="TextureRect" parent="HUD/Root"]
-offset_left = 10.0
+offset_left = 80.0
 offset_top = 6.0
-offset_right = 187.0
+offset_right = 257.0
 offset_bottom = 66.0
 texture = ExtResource("2_coin")
 expand_mode = 1
@@ -145,9 +145,9 @@ offset_right = -8.0
 
 [node name="PauseButton" type="TextureButton" parent="HUD/Root"]
 visible = false
-offset_left = 197.0
+offset_left = 10.0
 offset_top = 6.0
-offset_right = 257.0
+offset_right = 70.0
 offset_bottom = 66.0
 texture_normal = ExtResource("13_pause")
 ignore_texture_size = true
