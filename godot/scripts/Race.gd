@@ -106,7 +106,9 @@ const TEX_TURBO_EXHAUST := preload("res://assets/effects/turbo-exhaust-flames.pn
 const TEX_TURBO_RING := preload("res://assets/effects/turbo-energy-ring.png")
 const TEX_TURBO_FLASH := preload("res://assets/effects/turbo-activation-flash.png")
 const TEX_TURBO_SPEED_LINES := preload("res://assets/effects/turbo-speed-lines.png")
-const HD_HAZARD_SCALE := 0.25
+# Per-variant sizing keeps the flatter/narrower hazards as readable as the tyre.
+# Order matches HAZARD_TEXTURES: pothole, loose tyre, traffic cone.
+const HAZARD_DRAW_SCALES: Array[float] = [0.29, 0.25, 0.30]
 # A restrained lane-dependent yaw sells the perspective without making
 # outer-lane cars look as tilted as the converging divider lines.
 const MAX_LANE_VISUAL_ROTATION := 0.105
@@ -966,7 +968,7 @@ func _draw_obstacle(obstacle: Dictionary) -> void:
 		var variant: int = int(obstacle["variant"])
 		var flatness: float = lerpf(0.58, 0.92, depth) if variant == 0 else lerpf(0.88, 1.0, depth)
 		var shadow: float = 0.0 if variant == 0 else 0.25
-		_draw_sprite_on_road(HAZARD_TEXTURES[variant], pos, visual_scale * HD_HAZARD_SCALE, p, rotation, shadow, flatness)
+		_draw_sprite_on_road(HAZARD_TEXTURES[variant], pos, visual_scale * HAZARD_DRAW_SCALES[variant], p, rotation, shadow, flatness)
 	else:
 		var car_flatness: float = lerpf(0.88, 1.0, depth)
 		_draw_angle_sprite_on_road(TRAFFIC_ANGLE_SHEETS[obstacle["variant"]], _angle_frame_for_lane(lane), pos, visual_scale * HD_VEHICLE_SCALE, p, 0.32, car_flatness)
