@@ -11,7 +11,6 @@ const ComboCalloutConfig := preload("res://scripts/ComboCalloutConfig.gd")
 const LANES := 5
 # Five equal lanes: each occupies exactly 20% of the road width at every depth.
 const LANE_EDGES: Array[float] = [-1.0, -0.60, -0.20, 0.20, 0.60, 1.0]
-const LANE_CENTERS: Array[float] = [-0.80, -0.40, 0.0, 0.40, 0.80]
 const RACE_TIME := 60.0
 const FINISH_DISTANCE := 13000.0
 const ROAD_LENGTH := 260.0
@@ -80,7 +79,7 @@ const COMBO_BADGE_PEAK_SCALE := COMBO_BADGE_SCALE * 1.12
 
 const TEX_BACKGROUND := preload("res://assets/environment/ocean-sky.png")
 const TEX_GUARDRAILS := preload("res://assets/environment/guardrails.png")
-const HD_VEHICLE_SCALE := 0.30
+const HD_VEHICLE_SCALE := 0.45
 const VEHICLE_ANGLE_FRAME_COUNT := 5
 const TEX_PLAYER_ANGLE_SHEET := preload("res://assets/vehicles/player-gray-angle-sheet.png")
 # Prototype: use one approved red traffic identity across every spawn until
@@ -282,13 +281,32 @@ func half_width_at(p: float) -> float:
 	var bot_half := get_w() * 0.50
 	return lerp(top_half, bot_half, ease_p(p))
 
+func _lane_center_fraction(lane_index: int) -> float:
+	var safe_lane: int = clampi(lane_index, 0, LANES - 1)
+	return (LANE_EDGES[safe_lane] + LANE_EDGES[safe_lane + 1]) * 0.5
+
+
 func lane_fraction(lane_index: float) -> float:
-	var lo := clampi(int(floor(lane_index)), 0, LANES - 1)
-	var hi := clampi(int(ceil(lane_index)), 0, LANES - 1)
-	return lerp(LANE_CENTERS[lo], LANE_CENTERS[hi], lane_index - floor(lane_index))
+	# Derive every center from the same boundaries that draw the lane. This
+	# keeps vehicles centered at every depth even if lane widths change later.
+	var lo: int = clampi(int(floor(lane_index)), 0, LANES - 1)
+	var hi: int = clampi(int(ceil(lane_index)), 0, LANES - 1)
+	var blend: float = lane_index - floor(lane_index)
+	return lerpf(_lane_center_fraction(lo), _lane_center_fraction(hi), blend)
+
+func road_half_width_at_y(screen_y: float) -> float:
+	# The visible road edges are linear between the horizon and screen bottom.
+	# Deriving width from screen Y keeps road objects on the same center axes.
+	var hy: float = horizon_y()
+	var road_height: float = maxf(1.0, get_h() - hy)
+	var screen_depth: float = (screen_y - hy) / road_height
+	return lerpf(half_width_at(0.0), half_width_at(1.0), screen_depth)
+
 
 func lane_x(lane_index: float, p: float) -> float:
-	return center_x() + lane_fraction(lane_index) * half_width_at(p)
+	var screen_y: float = row_y(p)
+	return center_x() + lane_fraction(lane_index) * road_half_width_at_y(screen_y)
+
 
 func row_y(p: float) -> float:
 	return lerp(horizon_y(), player_row_y(), ease_p(p))
