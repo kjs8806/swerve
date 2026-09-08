@@ -77,7 +77,6 @@ const COMBO_BADGE_INTRO_SCALE := COMBO_BADGE_SCALE * 0.72
 const COMBO_BADGE_PEAK_SCALE := COMBO_BADGE_SCALE * 1.12
 
 const TEX_BACKGROUND := preload("res://assets/environment/hong-kong-night-hd.png")
-const TEX_GUARDRAILS := preload("res://assets/environment/guardrails.png")
 const HD_VEHICLE_SCALE := 0.45
 const VEHICLE_ANGLE_FRAME_COUNT := 5
 const TEX_PLAYER_ANGLE_SHEET := preload("res://assets/vehicles/player-gray-angle-sheet.png")
@@ -201,10 +200,6 @@ func _ready() -> void:
 	_build_turbo_segments()
 	btn_left.pressed.connect(func(): try_swerve(-1))
 	btn_right.pressed.connect(func(): try_swerve(1))
-	btn_left.button_down.connect(func(): _set_steer_btn_pressed_visual(btn_left, true))
-	btn_left.button_up.connect(func(): _set_steer_btn_pressed_visual(btn_left, false))
-	btn_right.button_down.connect(func(): _set_steer_btn_pressed_visual(btn_right, true))
-	btn_right.button_up.connect(func(): _set_steer_btn_pressed_visual(btn_right, false))
 	overlay_button.pressed.connect(func(): reset_game(true))
 	pause_button.pressed.connect(_toggle_pause)
 	set_process_unhandled_key_input(true)
@@ -374,24 +369,6 @@ func _toggle_pause() -> void:
 	elif state == State.PAUSED:
 		state = State.PLAYING
 		pause_button.texture_normal = TEX_PAUSE_ICON
-
-
-# On top of TextureButton's own pressed-texture swap, punch the button down
-# in scale and brighten it while held, then spring back on release, so it
-# reads as a physical button being pressed rather than just an icon swap.
-func _set_steer_btn_pressed_visual(btn: TextureButton, pressed: bool) -> void:
-	if btn.has_meta("press_tween"):
-		var existing: Tween = btn.get_meta("press_tween")
-		if existing != null and existing.is_valid():
-			existing.kill()
-	var tween := create_tween()
-	btn.set_meta("press_tween", tween)
-	if pressed:
-		tween.tween_property(btn, "scale", Vector2.ONE * 0.90, 0.05).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-		tween.parallel().tween_property(btn, "modulate:a", 0.85, 0.05)
-	else:
-		tween.tween_property(btn, "scale", Vector2.ONE, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-		tween.parallel().tween_property(btn, "modulate:a", 0.5, 0.12)
 
 
 func base_speed() -> float:
@@ -919,7 +896,6 @@ func _draw_road() -> void:
 
 	draw_line(Vector2(cx - top_half, hy), Vector2(cx - bot_half, h), Color.WHITE, 4.0)
 	draw_line(Vector2(cx + top_half, hy), Vector2(cx + bot_half, h), Color.WHITE, 4.0)
-	_draw_moving_guardrails(cx, hy, h)
 
 
 func _draw_city_background(w: float, h: float) -> void:
@@ -1050,54 +1026,6 @@ func _draw_scenery(w: float, h: float, hy: float, cx: float) -> void:
 			Vector2(rx + 10.0 * s, ry - 14.0 * s), Vector2(rx + 24.0 * s, ry),
 		])
 		draw_colored_polygon(pts, Color8(0x6b, 0x53, 0x3c))
-
-
-func _guardrail_point(cx: float, hy: float, h: float, p: float, side: float, outward: float = 0.0) -> Vector2:
-	var perspective: float = ease_p(p)
-	var gap: float = lerpf(7.0, 24.0, perspective)
-	var x: float = cx + side * (half_width_at(p) + gap + outward)
-	var y: float = lerpf(hy, h, perspective)
-	return Vector2(x, y)
-
-
-func _draw_moving_guardrails(cx: float, hy: float, h: float) -> void:
-	# The rail beams remain structurally continuous while their posts and amber
-	# reflectors advance toward the camera. This produces forward motion without
-	# scrolling the road's lane dividers.
-	const RAIL_SEGMENTS := 28
-	const POST_COUNT := 13
-	const POST_SCROLL_DISTANCE := 230.0
-	var phase: float = fmod(road_scroll / POST_SCROLL_DISTANCE, 1.0)
-
-	for side in [-1.0, 1.0]:
-		# Two cyan metallic beams follow the road perspective, separated from
-		# the white road edge so the ocean remains visible through the gap.
-		for i in range(RAIL_SEGMENTS):
-			var p0: float = float(i) / RAIL_SEGMENTS
-			var p1: float = float(i + 1) / RAIL_SEGMENTS
-			var perspective: float = ease_p((p0 + p1) * 0.5)
-			var width: float = lerpf(2.5, 9.0, perspective)
-			var a0: Vector2 = _guardrail_point(cx, hy, h, p0, side)
-			var a1: Vector2 = _guardrail_point(cx, hy, h, p1, side)
-			var b0: Vector2 = _guardrail_point(cx, hy, h, p0, side, lerpf(5.0, 16.0, ease_p(p0)))
-			var b1: Vector2 = _guardrail_point(cx, hy, h, p1, side, lerpf(5.0, 16.0, ease_p(p1)))
-			draw_line(a0, a1, Color8(0x08, 0x3b, 0x57), width + 3.0, true)
-			draw_line(a0, a1, Color8(0x54, 0xe8, 0xe0), width, true)
-			draw_line(b0, b1, Color8(0x05, 0x2d, 0x48), maxf(2.0, width * 0.72) + 2.0, true)
-			draw_line(b0, b1, Color8(0x2b, 0xb9, 0xc7), maxf(2.0, width * 0.72), true)
-
-		for i in range(POST_COUNT):
-			var p: float = fmod(float(i) / POST_COUNT + phase, 1.0)
-			var perspective: float = ease_p(p)
-			var scale: float = lerpf(0.38, 1.45, perspective)
-			var top: Vector2 = _guardrail_point(cx, hy, h, p, side, lerpf(2.0, 8.0, perspective))
-			var bottom: Vector2 = top + Vector2(side * 3.0 * scale, 17.0 * scale)
-			draw_line(top, bottom, Color8(0x03, 0x25, 0x38), 7.0 * scale, true)
-			draw_line(top, bottom, Color8(0x35, 0xc9, 0xc7), 4.2 * scale, true)
-			var reflector_size: Vector2 = Vector2(5.0, 9.0) * scale
-			var reflector_pos: Vector2 = bottom - reflector_size * 0.5
-			draw_rect(Rect2(reflector_pos, reflector_size), Color8(0x45, 0x24, 0x08), true)
-			draw_rect(Rect2(reflector_pos + reflector_size * 0.18, reflector_size * 0.64), Color8(0xff, 0xb0, 0x18), true)
 
 
 func _ellipse_points(center: Vector2, rx: float, ry: float, segments: int = 16) -> PackedVector2Array:
