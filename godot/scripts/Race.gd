@@ -9,8 +9,9 @@ extends Node2D
 const ComboCalloutConfig := preload("res://scripts/ComboCalloutConfig.gd")
 
 const LANES := 5
-const LANE_EDGES: Array[float] = [-1.0, -0.70, -0.20, 0.20, 0.70, 1.0]
-const LANE_CENTERS: Array[float] = [-0.85, -0.45, 0.0, 0.45, 0.85]
+# Five equal lanes: each occupies exactly 20% of the road width at every depth.
+const LANE_EDGES: Array[float] = [-1.0, -0.60, -0.20, 0.20, 0.60, 1.0]
+const LANE_CENTERS: Array[float] = [-0.80, -0.40, 0.0, 0.40, 0.80]
 const RACE_TIME := 60.0
 const FINISH_DISTANCE := 13000.0
 const ROAD_LENGTH := 260.0
@@ -252,7 +253,8 @@ func get_h() -> float:
 	return get_viewport_rect().size.y
 
 func horizon_y() -> float:
-	return get_h() * 0.14
+	# Extend the road and its perspective geometry to the top edge.
+	return 0.0
 
 func player_row_y() -> float:
 	return get_h() * 0.80
