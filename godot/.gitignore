@@ -1,6 +1,10 @@
 # Godot 4 local cache/import artifacts - regenerated automatically, never commit.
 .godot/
 *.import
+# Exception: this asset needs a non-default import setting (mipmaps enabled)
+# to avoid moire/aliasing when the game scales it down for display, so its
+# .import file is committed instead of left to regenerate with defaults.
+!assets/hud/progress-track-hd.png.import
 
 # Export build output (produced by the export-apk workflow / local exports).
 /builds/
