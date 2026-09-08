@@ -88,6 +88,10 @@ const TRAFFIC_ANGLE_SHEETS := [
 	preload("res://assets/vehicles/traffic-red-angle-sheet.png"),
 ]
 const TEX_COIN := preload("res://assets/collectibles/coin.png")
+# coin.png is a large-source HD circle (not sized 1:1 for the road), so its
+# draw size is derived from this instead of the raw texture pixel size - a
+# bit larger than the old sprite's on-screen footprint.
+const COIN_DRAW_SCALE := 0.19
 const TEX_TURBO_PICKUP := preload("res://assets/collectibles/turbo-pickup.png")
 const TURBO_SEGMENT_COUNT := 17
 const TEX_TURBO_SEGMENT_RED := preload("res://assets/hud/turbo-segment-red.png")
@@ -1101,7 +1105,7 @@ func _draw_car(pos: Vector2, scale: float, color: Color) -> void:
 
 func _draw_coin(pos: Vector2, scale: float) -> void:
 	var spin: float = 0.68 + 0.32 * abs(sin(elapsed_t * 5.0 + pos.x * 0.03))
-	var size := TEX_COIN.get_size() * scale
+	var size := TEX_COIN.get_size() * (scale * COIN_DRAW_SCALE)
 	size.x *= spin
 	draw_texture_rect(TEX_COIN, Rect2(pos - size * 0.5, size), false)
 
