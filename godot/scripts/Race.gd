@@ -276,21 +276,6 @@ func lane_fraction(lane_index: float) -> float:
 func lane_x(lane_index: float, p: float) -> float:
 	return center_x() + lane_fraction(lane_index) * half_width_at(p)
 
-
-func lane_rotation(lane_index: float, p: float) -> float:
-	# Align the vehicle's vertical axis with the local perspective direction
-	# of its lane. Outer-lane cars angle naturally; the center lane stays upright.
-	var sample_before: float = maxf(0.0, p - 0.02)
-	var sample_after: float = minf(1.5, p + 0.02)
-	var tangent := Vector2(
-		lane_x(lane_index, sample_after) - lane_x(lane_index, sample_before),
-		row_y(sample_after) - row_y(sample_before)
-	)
-	if tangent.length_squared() <= 0.0001:
-		return 0.0
-	return Vector2.DOWN.angle_to(tangent.normalized())
-
-
 func row_y(p: float) -> float:
 	return lerp(horizon_y(), player_row_y(), ease_p(p))
 
@@ -751,13 +736,12 @@ func _draw() -> void:
 	var px := lane_x(player_lane_visual, 1.0)
 	var py := player_row_y()
 	var p_scale := scale_at(1.0) * 1.05
-	var player_rotation: float = lane_rotation(player_lane_visual, 1.0)
 	var turbo_now := is_turbo
 	var t_now := elapsed_t
 	draw_items.append({"p": 1.001, "cb": func():
 		if turbo_now:
-			_draw_flame_trail(Vector2(px, py), p_scale, t_now, player_rotation)
-		_draw_sprite_centered(TEX_PLAYER, Vector2(px, py), p_scale * HD_VEHICLE_SCALE, player_rotation)
+			_draw_flame_trail(Vector2(px, py), p_scale, t_now)
+		_draw_sprite_centered(TEX_PLAYER, Vector2(px, py), p_scale * HD_VEHICLE_SCALE)
 	})
 
 	draw_items.sort_custom(func(a, b): return a["p"] < b["p"])
@@ -847,11 +831,9 @@ func _draw_road() -> void:
 	_draw_moving_guardrails(cx, hy, h)
 
 
-func _draw_sprite_centered(texture: Texture2D, pos: Vector2, scale: float, rotation: float = 0.0) -> void:
+func _draw_sprite_centered(texture: Texture2D, pos: Vector2, scale: float) -> void:
 	var size: Vector2 = texture.get_size() * scale
-	draw_set_transform(pos, rotation, Vector2.ONE)
-	draw_texture_rect(texture, Rect2(-size * 0.5, size), false)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	draw_texture_rect(texture, Rect2(pos - size * 0.5, size), false)
 
 
 func _draw_obstacle(obstacle: Dictionary) -> void:
@@ -861,7 +843,7 @@ func _draw_obstacle(obstacle: Dictionary) -> void:
 	if obstacle["kind"] == "hazard":
 		_draw_sprite_centered(HAZARD_TEXTURES[obstacle["variant"]], pos, visual_scale * HD_HAZARD_SCALE)
 	else:
-		_draw_sprite_centered(TRAFFIC_TEXTURES[obstacle["variant"]], pos, visual_scale * HD_VEHICLE_SCALE, lane_rotation(float(obstacle["lane"]), p))
+		_draw_sprite_centered(TRAFFIC_TEXTURES[obstacle["variant"]], pos, visual_scale * HD_VEHICLE_SCALE)
 
 
 func _draw_sky(w: float, hy: float) -> void:
@@ -1057,13 +1039,11 @@ func _draw_finish_tape(p: float) -> void:
 const FLAME_TEX_SCALE := 0.34
 
 
-func _draw_flame_trail(pos: Vector2, scale: float, t: float, rotation: float = 0.0) -> void:
+func _draw_flame_trail(pos: Vector2, scale: float, t: float) -> void:
 	var flicker: float = 0.82 + 0.18 * sin(t * 30.0)
 	var size: Vector2 = TEX_TURBO_EXHAUST.get_size() * (FLAME_TEX_SCALE * scale)
-	var local_origin := Vector2(0.0, 26.0 * scale)
-	draw_set_transform(pos, rotation, Vector2.ONE)
-	draw_texture_rect(TEX_TURBO_EXHAUST, Rect2(local_origin - Vector2(size.x * 0.5, 0.0), size), false, Color(1, 1, 1, flicker))
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	var origin: Vector2 = pos + Vector2(0.0, 26.0 * scale)
+	draw_texture_rect(TEX_TURBO_EXHAUST, Rect2(origin - Vector2(size.x * 0.5, 0.0), size), false, Color(1, 1, 1, flicker))
 
 
 # Approved energy-ring sprite, scaled up and faded out over
