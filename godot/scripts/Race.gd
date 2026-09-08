@@ -78,24 +78,13 @@ const COMBO_BADGE_PEAK_SCALE := COMBO_BADGE_SCALE * 1.12
 
 const TEX_BACKGROUND := preload("res://assets/environment/ocean-sky.png")
 const TEX_GUARDRAILS := preload("res://assets/environment/guardrails.png")
-const HD_VEHICLE_SCALE := 0.138
+const HD_VEHICLE_SCALE := 0.45
 const VEHICLE_ANGLE_FRAME_COUNT := 5
-const TEX_PLAYER_ANGLES := [
-	preload("res://assets/vehicles/angles/player-gray-m12.png"),
-	preload("res://assets/vehicles/angles/player-gray-m08.png"),
-	preload("res://assets/vehicles/angles/player-gray-000.png"),
-	preload("res://assets/vehicles/angles/player-gray-p08.png"),
-	preload("res://assets/vehicles/angles/player-gray-p12.png"),
-]
-# Individual native-resolution textures avoid enlarging small atlas cells.
-const TRAFFIC_ANGLE_SETS := [
-	[
-		preload("res://assets/vehicles/angles/traffic-red-m12.png"),
-		preload("res://assets/vehicles/angles/traffic-red-m08.png"),
-		preload("res://assets/vehicles/angles/traffic-red-000.png"),
-		preload("res://assets/vehicles/angles/traffic-red-p08.png"),
-		preload("res://assets/vehicles/angles/traffic-red-p12.png"),
-	],
+const TEX_PLAYER_ANGLE_SHEET := preload("res://assets/vehicles/player-gray-angle-sheet.png")
+# Prototype: use one approved red traffic identity across every spawn until
+# the multi-color angle sheets are approved.
+const TRAFFIC_ANGLE_SHEETS := [
+	preload("res://assets/vehicles/traffic-red-angle-sheet.png"),
 ]
 const TEX_COIN := preload("res://assets/collectibles/coin.png")
 # coin.png is a large-source HD circle (not sized 1:1 for the road), so its
@@ -526,7 +515,7 @@ func _spawn_obstacle_wave() -> void:
 			"lane": free_lanes[i], "p": 0.0, "resolved": false,
 			"dodged": false, "was_near": false,
 			"kind": "hazard" if is_hazard else "traffic",
-			"variant": randi() % (HAZARD_TEXTURES.size() if is_hazard else TRAFFIC_ANGLE_SETS.size()),
+			"variant": randi() % (HAZARD_TEXTURES.size() if is_hazard else TRAFFIC_ANGLE_SHEETS.size()),
 		})
 
 
@@ -821,7 +810,7 @@ func _draw() -> void:
 	draw_items.append({"p": 1.001, "cb": func():
 		if turbo_now:
 			_draw_flame_trail(Vector2(px, py), p_scale, t_now, player_rotation)
-		_draw_angle_texture_on_road(TEX_PLAYER_ANGLES[_angle_frame_for_lane(player_lane_visual)], Vector2(px, py), p_scale * HD_VEHICLE_SCALE, 1.0, 0.34)
+		_draw_angle_sprite_on_road(TEX_PLAYER_ANGLE_SHEET, _angle_frame_for_lane(player_lane_visual), Vector2(px, py), p_scale * HD_VEHICLE_SCALE, 1.0, 0.34)
 	})
 
 	draw_items.sort_custom(func(a, b): return a["p"] < b["p"])
@@ -946,12 +935,15 @@ func _angle_frame_for_lane(lane_index: float) -> int:
 	return clampi(int(round(lane_index)), 0, VEHICLE_ANGLE_FRAME_COUNT - 1)
 
 
-func _draw_angle_texture_on_road(texture: Texture2D, pos: Vector2, scale: float, p: float, shadow_strength: float = 0.0, vertical_scale: float = 1.0) -> void:
-	var rendered_size: Vector2 = texture.get_size() * scale
+func _draw_angle_sprite_on_road(sheet: Texture2D, frame_index: int, pos: Vector2, scale: float, p: float, shadow_strength: float = 0.0, vertical_scale: float = 1.0) -> void:
+	var frame_width: float = sheet.get_width() / float(VEHICLE_ANGLE_FRAME_COUNT)
+	var frame_size := Vector2(frame_width, float(sheet.get_height()))
+	var rendered_size: Vector2 = frame_size * scale
 	rendered_size.y *= vertical_scale
 	if shadow_strength > 0.0:
 		_draw_road_shadow(pos, rendered_size, p, shadow_strength)
-	draw_texture_rect(texture, Rect2(pos - rendered_size * 0.5, rendered_size), false, _depth_tint(p))
+	var source := Rect2(Vector2(frame_width * frame_index, 0.0), frame_size)
+	draw_texture_rect_region(sheet, Rect2(pos - rendered_size * 0.5, rendered_size), source, _depth_tint(p))
 
 
 func _draw_sprite_centered(texture: Texture2D, pos: Vector2, scale: float) -> void:
@@ -973,8 +965,7 @@ func _draw_obstacle(obstacle: Dictionary) -> void:
 		_draw_sprite_on_road(HAZARD_TEXTURES[variant], pos, visual_scale * HD_HAZARD_SCALE, p, rotation, shadow, flatness)
 	else:
 		var car_flatness: float = lerpf(0.88, 1.0, depth)
-		var angle_set: Array = TRAFFIC_ANGLE_SETS[obstacle["variant"]]
-		_draw_angle_texture_on_road(angle_set[_angle_frame_for_lane(lane)], pos, visual_scale * HD_VEHICLE_SCALE, p, 0.32, car_flatness)
+		_draw_angle_sprite_on_road(TRAFFIC_ANGLE_SHEETS[obstacle["variant"]], _angle_frame_for_lane(lane), pos, visual_scale * HD_VEHICLE_SCALE, p, 0.32, car_flatness)
 
 
 func _draw_sky(w: float, hy: float) -> void:
