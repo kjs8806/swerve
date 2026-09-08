@@ -76,7 +76,7 @@ const COMBO_BADGE_SCALE := 0.80
 const COMBO_BADGE_INTRO_SCALE := COMBO_BADGE_SCALE * 0.72
 const COMBO_BADGE_PEAK_SCALE := COMBO_BADGE_SCALE * 1.12
 
-const TEX_BACKGROUND := preload("res://assets/environment/ocean-sky.png")
+const TEX_BACKGROUND := preload("res://assets/environment/hong-kong-night-hd.png")
 const TEX_GUARDRAILS := preload("res://assets/environment/guardrails.png")
 const HD_VEHICLE_SCALE := 0.45
 const VEHICLE_ANGLE_FRAME_COUNT := 5
@@ -876,7 +876,7 @@ func _draw_road() -> void:
 	var hy := horizon_y()
 	var cx := center_x()
 
-	draw_texture_rect(TEX_BACKGROUND, Rect2(0, 0, w, h), false)
+	_draw_city_background(w, h)
 
 	var top_half := half_width_at(0.0)
 	var bot_half := half_width_at(1.0)
@@ -898,6 +898,25 @@ func _draw_road() -> void:
 	draw_line(Vector2(cx - top_half, hy), Vector2(cx - bot_half, h), Color.WHITE, 4.0)
 	draw_line(Vector2(cx + top_half, hy), Vector2(cx + bot_half, h), Color.WHITE, 4.0)
 	_draw_moving_guardrails(cx, hy, h)
+
+
+func _draw_city_background(w: float, h: float) -> void:
+	# Cross-fade two gently zooming copies to create a seamless forward-motion
+	# parallax loop. The slight steering offset makes the skyline respond to the
+	# car without exposing the texture edges.
+	var phase: float = fmod(road_scroll / 1600.0, 1.0)
+	var lane_offset: float = (player_lane_visual - float((LANES - 1) / 2)) * -6.0
+	var max_zoom := 0.08
+	var zoom_a: float = 1.0 + max_zoom * phase
+	var zoom_b: float = 1.0 - max_zoom + max_zoom * phase
+	_draw_city_layer(w, h, zoom_a, lane_offset, 1.0 - phase)
+	_draw_city_layer(w, h, zoom_b, lane_offset, phase)
+
+
+func _draw_city_layer(w: float, h: float, zoom: float, x_offset: float, alpha: float) -> void:
+	var size := Vector2(w, h) * zoom
+	var pos := Vector2((w - size.x) * 0.5 + x_offset, (h - size.y) * 0.5)
+	draw_texture_rect(TEX_BACKGROUND, Rect2(pos, size), false, Color(1.0, 1.0, 1.0, alpha))
 
 
 func _lane_visual_rotation(lane_index: float, p: float) -> float:
