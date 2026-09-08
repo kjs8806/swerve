@@ -104,6 +104,7 @@ stretch_mode = 6
 mouse_filter = 2
 
 [node name="PlayerMarker" type="TextureRect" parent="HUD/Root/ProgressTrack"]
+texture_filter = 4
 offset_left = 4.0
 offset_top = 15.0
 offset_right = 44.0
