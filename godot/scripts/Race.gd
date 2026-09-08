@@ -33,7 +33,6 @@ const TURBO_SPAWN_MAX := 11.0
 # Near-miss timing is intentionally independent from vehicle artwork scale.
 # Starting slightly earlier keeps the maneuver readable with the larger HD cars.
 const NEAR_MISS_ZONE_START := 0.78
-const DANGER_ZONE_START := 0.83
 const COLLIDE_AT := 0.97
 const PASS_AT := 1.08
 const REMOVE_AT := 1.6
@@ -629,7 +628,7 @@ func _update_game(dt: float) -> void:
 		if c["collected"]:
 			continue
 		c["p"] += dp
-		if c["lane"] == player_lane and c["p"] >= DANGER_ZONE_START and c["p"] < COLLIDE_AT + 0.05:
+		if c["lane"] == player_lane and c["p"] >= COLLIDE_AT and c["p"] < COLLIDE_AT + 0.05:
 			c["collected"] = true
 			coins += 1
 			coin_punch_t = COIN_PUNCH_DURATION
@@ -642,7 +641,7 @@ func _update_game(dt: float) -> void:
 		if pickup["collected"]:
 			continue
 		pickup["p"] += dp
-		if pickup["lane"] == player_lane and pickup["p"] >= DANGER_ZONE_START and pickup["p"] < COLLIDE_AT + 0.05:
+		if pickup["lane"] == player_lane and pickup["p"] >= COLLIDE_AT and pickup["p"] < COLLIDE_AT + 0.05:
 			pickup["collected"] = true
 			_activate_timed_turbo()
 
