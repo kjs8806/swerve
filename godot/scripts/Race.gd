@@ -896,6 +896,7 @@ func _draw_road() -> void:
 
 	draw_line(Vector2(cx - top_half, hy), Vector2(cx - bot_half, h), Color.WHITE, 4.0)
 	draw_line(Vector2(cx + top_half, hy), Vector2(cx + bot_half, h), Color.WHITE, 4.0)
+	_draw_moving_guardrails(cx, hy, h)
 
 
 func _draw_city_background(w: float, h: float) -> void:
@@ -1026,6 +1027,49 @@ func _draw_scenery(w: float, h: float, hy: float, cx: float) -> void:
 			Vector2(rx + 10.0 * s, ry - 14.0 * s), Vector2(rx + 24.0 * s, ry),
 		])
 		draw_colored_polygon(pts, Color8(0x6b, 0x53, 0x3c))
+
+
+func _guardrail_point(cx: float, hy: float, h: float, p: float, side: float, outward: float = 0.0) -> Vector2:
+	var perspective: float = ease_p(p)
+	var gap: float = lerpf(7.0, 24.0, perspective)
+	var x: float = cx + side * (half_width_at(p) + gap + outward)
+	var y: float = lerpf(hy, h, perspective)
+	return Vector2(x, y)
+
+
+func _draw_moving_guardrails(cx: float, hy: float, h: float) -> void:
+	const RAIL_SEGMENTS := 28
+	const POST_COUNT := 13
+	const POST_SCROLL_DISTANCE := 230.0
+	var phase: float = fmod(road_scroll / POST_SCROLL_DISTANCE, 1.0)
+
+	for side in [-1.0, 1.0]:
+		for i in range(RAIL_SEGMENTS):
+			var p0: float = float(i) / RAIL_SEGMENTS
+			var p1: float = float(i + 1) / RAIL_SEGMENTS
+			var perspective: float = ease_p((p0 + p1) * 0.5)
+			var width: float = lerpf(2.5, 9.0, perspective)
+			var a0: Vector2 = _guardrail_point(cx, hy, h, p0, side)
+			var a1: Vector2 = _guardrail_point(cx, hy, h, p1, side)
+			var b0: Vector2 = _guardrail_point(cx, hy, h, p0, side, lerpf(5.0, 16.0, ease_p(p0)))
+			var b1: Vector2 = _guardrail_point(cx, hy, h, p1, side, lerpf(5.0, 16.0, ease_p(p1)))
+			draw_line(a0, a1, Color8(0x08, 0x3b, 0x57), width + 3.0, true)
+			draw_line(a0, a1, Color8(0x54, 0xe8, 0xe0), width, true)
+			draw_line(b0, b1, Color8(0x05, 0x2d, 0x48), maxf(2.0, width * 0.72) + 2.0, true)
+			draw_line(b0, b1, Color8(0x2b, 0xb9, 0xc7), maxf(2.0, width * 0.72), true)
+
+		for i in range(POST_COUNT):
+			var p: float = fmod(float(i) / POST_COUNT + phase, 1.0)
+			var perspective: float = ease_p(p)
+			var scale: float = lerpf(0.38, 1.45, perspective)
+			var top: Vector2 = _guardrail_point(cx, hy, h, p, side, lerpf(2.0, 8.0, perspective))
+			var bottom: Vector2 = top + Vector2(side * 3.0 * scale, 17.0 * scale)
+			draw_line(top, bottom, Color8(0x03, 0x25, 0x38), 7.0 * scale, true)
+			draw_line(top, bottom, Color8(0x35, 0xc9, 0xc7), 4.2 * scale, true)
+			var reflector_size: Vector2 = Vector2(5.0, 9.0) * scale
+			var reflector_pos: Vector2 = bottom - reflector_size * 0.5
+			draw_rect(Rect2(reflector_pos, reflector_size), Color8(0x45, 0x24, 0x08), true)
+			draw_rect(Rect2(reflector_pos + reflector_size * 0.18, reflector_size * 0.64), Color8(0xff, 0xb0, 0x18), true)
 
 
 func _ellipse_points(center: Vector2, rx: float, ry: float, segments: int = 16) -> PackedVector2Array:
