@@ -1,4 +1,4 @@
-[gd_scene load_steps=18 format=3]
+[gd_scene load_steps=19 format=3]
 
 [ext_resource type="Script" path="res://scripts/Race.gd" id="1"]
 [ext_resource type="Texture2D" path="res://assets/hud/coin-frame.png" id="2_coin"]
@@ -13,6 +13,7 @@
 [ext_resource type="Shader" path="res://shaders/gradient_text.gdshader" id="11_grad_shader"]
 [ext_resource type="FontFile" path="res://assets/fonts/RacingSansOne-Regular.ttf" id="12_combo_font"]
 [ext_resource type="Texture2D" path="res://assets/hud/pause-button.png" id="13_pause"]
+[ext_resource type="Texture2D" path="res://assets/hud/progress-marker-glow.png" id="14_glow"]
 
 [sub_resource type="FontVariation" id="FontVariation_extrabold"]
 base_font = ExtResource("10_display_font")
@@ -110,6 +111,17 @@ offset_top = 15.0
 offset_right = 44.0
 offset_bottom = 39.5
 texture = ExtResource("5_car")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="MarkerGlow" type="TextureRect" parent="HUD/Root/ProgressTrack/PlayerMarker"]
+show_behind_parent = true
+offset_left = -10.0
+offset_top = -17.75
+offset_right = 50.0
+offset_bottom = 42.25
+texture = ExtResource("14_glow")
 expand_mode = 1
 stretch_mode = 5
 mouse_filter = 2
