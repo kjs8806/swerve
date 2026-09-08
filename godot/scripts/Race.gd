@@ -101,6 +101,7 @@ const HAZARD_TEXTURES := [
 	preload("res://assets/obstacles/loose-tire-hd.png"),
 	preload("res://assets/obstacles/traffic-cone-hd.png"),
 ]
+const FINISH_TAPE_FONT := preload("res://assets/fonts/Rajdhani-Bold.ttf")
 
 enum State { READY, PLAYING, WIN, LOSE }
 
@@ -140,6 +141,7 @@ var elapsed_t: float = 0.0
 var lane_change_lock_until: int = 0
 var combo_popup_timer: float = 0.0
 var combo_badge_tween: Tween
+var combo_popup_tween: Tween
 var vignette_tex: GradientTexture2D
 var cloud_seeds: Array = []
 var rock_seeds: Array = []
@@ -341,11 +343,28 @@ func _spawn_spark(pos: Vector2, scale: float, duration: float, color: Color) -> 
 
 
 func popup_combo(text: String, color: Color) -> void:
+	if combo_popup_tween != null and combo_popup_tween.is_valid():
+		combo_popup_tween.kill()
 	combo_popup.text = text
 	combo_popup.add_theme_color_override("font_color", color)
-	combo_popup.modulate = Color(1, 1, 1, 1)
 	combo_popup.visible = true
+	combo_popup.pivot_offset = combo_popup.size * 0.5
+	combo_popup.scale = Vector2.ONE * 0.55
+	combo_popup.rotation = deg_to_rad(-5.0)
+	combo_popup.modulate = Color(1, 1, 1, 0.0)
 	combo_popup_timer = 0.65
+
+	combo_popup_tween = create_tween()
+	combo_popup_tween.set_parallel(true)
+	combo_popup_tween.tween_property(combo_popup, "scale", Vector2.ONE * 1.1, 0.16) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	combo_popup_tween.tween_property(combo_popup, "rotation", 0.0, 0.16) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	combo_popup_tween.tween_property(combo_popup, "modulate:a", 1.0, 0.10)
+	combo_popup_tween.chain().set_parallel(false)
+	combo_popup_tween.tween_property(combo_popup, "scale", Vector2.ONE, 0.10).set_trans(Tween.TRANS_QUAD)
+	combo_popup_tween.tween_interval(0.25)
+	combo_popup_tween.tween_property(combo_popup, "modulate:a", 0.0, 0.14)
 
 
 func _play_combo_badge_fx() -> void:
@@ -586,7 +605,11 @@ func _update_game(dt: float) -> void:
 
 	obstacle_timer -= dt
 	if obstacle_timer <= 0.0:
-		_spawn_obstacle_wave()
+		# Stop feeding in new oncoming traffic once the finish line has
+		# scrolled into view, so the final stretch reads as a clear run to
+		# the flag instead of a last-second dodge.
+		if FINISH_DISTANCE - distance > FINISH_REVEAL_RANGE:
+			_spawn_obstacle_wave()
 		var t := time
 		var interval: float
 		if t < 8.0:
@@ -1012,25 +1035,51 @@ func _draw_finish_tape(p: float) -> void:
 	var scale := scale_at(p)
 	var cx := center_x()
 	var hw: float = half_width_at(p) * (1.0 + 1.0 / (LANES - 1))
-	var band_h: float = 24.0 * scale
-	var pole_w: float = 6.0 * scale
-	var pole_h: float = band_h * 2.6
+	var band_h: float = 26.0 * scale
+	var trim_h: float = 4.0 * scale
+	var pole_w: float = 7.0 * scale
+	var banner_h: float = band_h + trim_h * 2.0
+	var pole_h: float = banner_h + 16.0 * scale
+	var cap_r: float = pole_w * 1.15
 
-	draw_rect(Rect2(cx - hw - pole_w, y - pole_h, pole_w, pole_h), Color8(0xc0, 0x2c, 0x46))
-	draw_rect(Rect2(cx + hw, y - pole_h, pole_w, pole_h), Color8(0xc0, 0x2c, 0x46))
+	var left_pole_x := cx - hw - pole_w
+	var right_pole_x := cx + hw
+	var pole_top := y - pole_h
 
-	var cols := 16
+	# soft contact shadow beneath the whole banner assembly, for depth
+	draw_rect(Rect2(left_pole_x - 2.0 * scale, y - banner_h + 5.0 * scale,
+		(right_pole_x + pole_w + 2.0 * scale) - (left_pole_x - 2.0 * scale), banner_h),
+		Color(0, 0, 0, 0.20))
+
+	# poles: brushed-steel look (dark body + bright highlight stripe) with a
+	# gold finial cap, rather than a flat single-tone rectangle
+	for pole_x in [left_pole_x, right_pole_x]:
+		draw_rect(Rect2(pole_x, pole_top, pole_w, pole_h), Color8(0x33, 0x36, 0x3d))
+		draw_rect(Rect2(pole_x + pole_w * 0.6, pole_top, pole_w * 0.2, pole_h), Color8(0x9a, 0xa1, 0xad))
+		draw_circle(Vector2(pole_x + pole_w * 0.5, pole_top), cap_r, Color8(0xff, 0xcf, 0x4d))
+		draw_circle(Vector2(pole_x + pole_w * 0.5, pole_top), cap_r, Color(0, 0, 0, 0.35), false, 1.5 * scale)
+
+	# gold trim frames the checkered field top and bottom
+	draw_rect(Rect2(cx - hw, y - banner_h, hw * 2.0, trim_h), Color8(0xff, 0xc9, 0x3c))
+	draw_rect(Rect2(cx - hw, y - trim_h, hw * 2.0, trim_h), Color8(0xff, 0xc9, 0x3c))
+
+	var cols := 18
 	var cw: float = (hw * 2.0) / cols
 	for i in range(cols):
-		var col: Color = Color8(0x11, 0x13, 0x18) if i % 2 == 0 else Color8(0xf5, 0xf5, 0xf5)
-		draw_rect(Rect2(cx - hw + i * cw, y - band_h, cw, band_h), col)
-	draw_rect(Rect2(cx - hw, y - band_h, hw * 2.0, band_h), Color(0, 0, 0, 0.5), false, 2.0 * scale)
+		var col: Color = Color8(0x14, 0x16, 0x1c) if i % 2 == 0 else Color8(0xf7, 0xf7, 0xf7)
+		draw_rect(Rect2(cx - hw + i * cw, y - banner_h + trim_h, cw, band_h), col)
 
-	var font := ThemeDB.fallback_font
-	var font_size: int = int(15 * scale)
-	var text_pos := Vector2(cx - font.get_string_size("FINISH", HORIZONTAL_ALIGNMENT_CENTER, -1, font_size).x / 2.0, y - band_h / 2.0 + 5.0 * scale)
-	draw_string_outline(font, text_pos, "FINISH", HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, maxi(2, int(3 * scale)), Color(0, 0, 0, 0.85))
-	draw_string(font, text_pos, "FINISH", HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, Color.WHITE)
+	# crisp dark frame around the whole banner ties the trim and checkers together
+	draw_rect(Rect2(cx - hw, y - banner_h, hw * 2.0, banner_h), Color(0, 0, 0, 0.55), false, 2.0 * scale)
+
+	var font := FINISH_TAPE_FONT
+	var font_size: int = int(18 * scale)
+	var label := "FINISH"
+	var text_w := font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size).x
+	var text_pos := Vector2(cx - text_w / 2.0, y - banner_h + trim_h + band_h / 2.0 + 6.5 * scale)
+	draw_string_outline(font, text_pos + Vector2(1.0, 1.5) * scale, label, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, maxi(2, int(3 * scale)), Color(0, 0, 0, 0.35))
+	draw_string_outline(font, text_pos, label, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, maxi(2, int(4 * scale)), Color(0, 0, 0, 0.9))
+	draw_string(font, text_pos, label, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, Color8(0xff, 0xdd, 0x77))
 
 
 # Approved twin-exhaust-flame sprite (already a matched left/right pair in
