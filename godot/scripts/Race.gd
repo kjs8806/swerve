@@ -1148,8 +1148,12 @@ func _draw_finish_tape(p: float) -> void:
 	var p1: float = p + half_pt
 	var y0 := row_y(p0)
 	var y1 := row_y(p1)
-	var hw0 := half_width_at(p0)
-	var hw1 := half_width_at(p1)
+	# Match the width of the road polygon at these exact screen rows. The road
+	# reaches its full bottom width at the viewport bottom, while row_y(1.0)
+	# is the player's 80%-height row; half_width_at(p) therefore overestimated
+	# the stripe width near the player and let its corners hang past the edges.
+	var hw0 := road_half_width_at_y(y0)
+	var hw1 := road_half_width_at_y(y1)
 
 	var gcols := 20
 	for i in range(gcols):
