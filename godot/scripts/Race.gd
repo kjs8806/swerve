@@ -9,8 +9,9 @@ extends Node2D
 const ComboCalloutConfig := preload("res://scripts/ComboCalloutConfig.gd")
 
 const LANES := 5
-const LANE_EDGES: Array[float] = [-1.0, -0.70, -0.20, 0.20, 0.70, 1.0]
-const LANE_CENTERS: Array[float] = [-0.85, -0.45, 0.0, 0.45, 0.85]
+# Five equal lanes: each occupies exactly 20% of the road width at every depth.
+const LANE_EDGES: Array[float] = [-1.0, -0.60, -0.20, 0.20, 0.60, 1.0]
+const LANE_CENTERS: Array[float] = [-0.80, -0.40, 0.0, 0.40, 0.80]
 const RACE_TIME := 60.0
 const FINISH_DISTANCE := 13000.0
 const ROAD_LENGTH := 260.0
@@ -75,13 +76,12 @@ const COMBO_BADGE_PEAK_SCALE := COMBO_BADGE_SCALE * 1.12
 const TEX_BACKGROUND := preload("res://assets/environment/ocean-sky.png")
 const TEX_GUARDRAILS := preload("res://assets/environment/guardrails.png")
 const HD_VEHICLE_SCALE := 0.30
-const TEX_PLAYER := preload("res://assets/vehicles/player-gray-hd.png")
-const TRAFFIC_TEXTURES := [
-	preload("res://assets/vehicles/traffic-coral-hd.png"),
-	preload("res://assets/vehicles/traffic-yellow-hd.png"),
-	preload("res://assets/vehicles/traffic-blue-hd.png"),
-	preload("res://assets/vehicles/traffic-green-hd.png"),
-	preload("res://assets/vehicles/traffic-orange-hd.png"),
+const VEHICLE_ANGLE_FRAME_COUNT := 5
+const TEX_PLAYER_ANGLE_SHEET := preload("res://assets/vehicles/player-gray-angle-sheet.png")
+# Prototype: use one approved red traffic identity across every spawn until
+# the multi-color angle sheets are approved.
+const TRAFFIC_ANGLE_SHEETS := [
+	preload("res://assets/vehicles/traffic-red-angle-sheet.png"),
 ]
 const TEX_COIN := preload("res://assets/collectibles/coin.png")
 const TEX_TURBO_PICKUP := preload("res://assets/collectibles/turbo-pickup.png")
@@ -96,6 +96,9 @@ const TEX_TURBO_RING := preload("res://assets/effects/turbo-energy-ring.png")
 const TEX_TURBO_FLASH := preload("res://assets/effects/turbo-activation-flash.png")
 const TEX_TURBO_SPEED_LINES := preload("res://assets/effects/turbo-speed-lines.png")
 const HD_HAZARD_SCALE := 0.25
+# A restrained lane-dependent yaw sells the perspective without making
+# outer-lane cars look as tilted as the converging divider lines.
+const MAX_LANE_VISUAL_ROTATION := 0.105
 const HAZARD_TEXTURES := [
 	preload("res://assets/obstacles/pothole-hd.png"),
 	preload("res://assets/obstacles/loose-tire-hd.png"),
@@ -254,7 +257,8 @@ func get_h() -> float:
 	return get_viewport_rect().size.y
 
 func horizon_y() -> float:
-	return get_h() * 0.14
+	# Extend the road and its perspective geometry to the top edge.
+	return 0.0
 
 func player_row_y() -> float:
 	return get_h() * 0.80
@@ -471,7 +475,7 @@ func _spawn_obstacle_wave() -> void:
 			"lane": free_lanes[i], "p": 0.0, "resolved": false,
 			"dodged": false, "was_near": false,
 			"kind": "hazard" if is_hazard else "traffic",
-			"variant": randi() % (HAZARD_TEXTURES.size() if is_hazard else TRAFFIC_TEXTURES.size()),
+			"variant": randi() % (HAZARD_TEXTURES.size() if is_hazard else TRAFFIC_ANGLE_SHEETS.size()),
 		})
 
 
@@ -759,12 +763,13 @@ func _draw() -> void:
 	var px := lane_x(player_lane_visual, 1.0)
 	var py := player_row_y()
 	var p_scale := scale_at(1.0) * 1.05
+	var player_rotation: float = _lane_visual_rotation(player_lane_visual, 1.0)
 	var turbo_now := is_turbo
 	var t_now := elapsed_t
 	draw_items.append({"p": 1.001, "cb": func():
 		if turbo_now:
-			_draw_flame_trail(Vector2(px, py), p_scale, t_now)
-		_draw_sprite_centered(TEX_PLAYER, Vector2(px, py), p_scale * HD_VEHICLE_SCALE)
+			_draw_flame_trail(Vector2(px, py), p_scale, t_now, player_rotation)
+		_draw_angle_sprite_on_road(TEX_PLAYER_ANGLE_SHEET, _angle_frame_for_lane(player_lane_visual), Vector2(px, py), p_scale * HD_VEHICLE_SCALE, 1.0, 0.34)
 	})
 
 	draw_items.sort_custom(func(a, b): return a["p"] < b["p"])
@@ -829,19 +834,13 @@ func _draw_road() -> void:
 	var top_half := half_width_at(0.0)
 	var bot_half := half_width_at(1.0)
 
-	# Road surface: dark base + a lighter center band for a subtle
-	# crowned-asphalt look instead of one flat fill.
+	# One uniform asphalt surface across all five lanes. Keeping the fill
+	# edge-to-edge prevents the outer lanes from appearing shadowed.
 	var poly := PackedVector2Array([
 		Vector2(cx - top_half, hy), Vector2(cx + top_half, hy),
 		Vector2(cx + bot_half, h), Vector2(cx - bot_half, h),
 	])
-	draw_colored_polygon(poly, Color8(0x2c, 0x30, 0x3d))
-	var inset := 0.72
-	var poly_hi := PackedVector2Array([
-		Vector2(cx - top_half * inset, hy), Vector2(cx + top_half * inset, hy),
-		Vector2(cx + bot_half * inset, h), Vector2(cx - bot_half * inset, h),
-	])
-	draw_colored_polygon(poly_hi, Color(0.28, 0.31, 0.4, 0.55))
+	draw_colored_polygon(poly, Color8(0x3a, 0x3f, 0x50))
 
 	for i in range(1, LANES):
 		var frac: float = LANE_EDGES[i]
@@ -854,6 +853,58 @@ func _draw_road() -> void:
 	_draw_moving_guardrails(cx, hy, h)
 
 
+func _lane_visual_rotation(lane_index: float, p: float) -> float:
+	var normalized_lane: float = lane_fraction(lane_index) / 0.8
+	var depth: float = clampf(ease_p(p), 0.0, 1.0)
+	return -normalized_lane * MAX_LANE_VISUAL_ROTATION * lerpf(0.18, 1.0, depth)
+
+
+func _depth_tint(p: float) -> Color:
+	# Distant objects pick up a subtle cool atmospheric haze, then regain
+	# full contrast as they approach the camera.
+	var depth: float = clampf(ease_p(p), 0.0, 1.0)
+	return Color(
+		lerpf(0.74, 1.0, depth),
+		lerpf(0.84, 1.0, depth),
+		1.0,
+		lerpf(0.76, 1.0, depth)
+	)
+
+
+func _draw_road_shadow(pos: Vector2, rendered_size: Vector2, p: float, strength: float) -> void:
+	var depth: float = clampf(ease_p(p), 0.0, 1.0)
+	var shadow_center := pos + Vector2(0.0, rendered_size.y * 0.22)
+	var radius_x: float = rendered_size.x * lerpf(0.25, 0.34, depth)
+	var radius_y: float = rendered_size.y * lerpf(0.055, 0.09, depth)
+	var alpha: float = strength * lerpf(0.35, 1.0, depth)
+	draw_colored_polygon(_ellipse_points(shadow_center, radius_x, radius_y, 20), Color(0.01, 0.015, 0.025, alpha))
+
+
+func _draw_sprite_on_road(texture: Texture2D, pos: Vector2, scale: float, p: float, rotation: float = 0.0, shadow_strength: float = 0.0, vertical_scale: float = 1.0) -> void:
+	var size: Vector2 = texture.get_size() * scale
+	size.y *= vertical_scale
+	if shadow_strength > 0.0:
+		_draw_road_shadow(pos, size, p, shadow_strength)
+	draw_set_transform(pos, rotation, Vector2.ONE)
+	draw_texture_rect(texture, Rect2(-size * 0.5, size), false, _depth_tint(p))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+func _angle_frame_for_lane(lane_index: float) -> int:
+	return clampi(int(round(lane_index)), 0, VEHICLE_ANGLE_FRAME_COUNT - 1)
+
+
+func _draw_angle_sprite_on_road(sheet: Texture2D, frame_index: int, pos: Vector2, scale: float, p: float, shadow_strength: float = 0.0, vertical_scale: float = 1.0) -> void:
+	var frame_width: float = sheet.get_width() / float(VEHICLE_ANGLE_FRAME_COUNT)
+	var frame_size := Vector2(frame_width, float(sheet.get_height()))
+	var rendered_size: Vector2 = frame_size * scale
+	rendered_size.y *= vertical_scale
+	if shadow_strength > 0.0:
+		_draw_road_shadow(pos, rendered_size, p, shadow_strength)
+	var source := Rect2(Vector2(frame_width * frame_index, 0.0), frame_size)
+	draw_texture_rect_region(sheet, Rect2(pos - rendered_size * 0.5, rendered_size), source, _depth_tint(p))
+
+
 func _draw_sprite_centered(texture: Texture2D, pos: Vector2, scale: float) -> void:
 	var size: Vector2 = texture.get_size() * scale
 	draw_texture_rect(texture, Rect2(pos - size * 0.5, size), false)
@@ -861,12 +912,19 @@ func _draw_sprite_centered(texture: Texture2D, pos: Vector2, scale: float) -> vo
 
 func _draw_obstacle(obstacle: Dictionary) -> void:
 	var p: float = obstacle["p"]
-	var pos := Vector2(lane_x(obstacle["lane"], p), row_y(p))
-	var visual_scale := scale_at(p)
+	var lane: float = float(obstacle["lane"])
+	var pos := Vector2(lane_x(lane, p), row_y(p))
+	var visual_scale: float = scale_at(p)
+	var rotation: float = _lane_visual_rotation(lane, p)
+	var depth: float = clampf(ease_p(p), 0.0, 1.0)
 	if obstacle["kind"] == "hazard":
-		_draw_sprite_centered(HAZARD_TEXTURES[obstacle["variant"]], pos, visual_scale * HD_HAZARD_SCALE)
+		var variant: int = int(obstacle["variant"])
+		var flatness: float = lerpf(0.58, 0.92, depth) if variant == 0 else lerpf(0.88, 1.0, depth)
+		var shadow: float = 0.0 if variant == 0 else 0.25
+		_draw_sprite_on_road(HAZARD_TEXTURES[variant], pos, visual_scale * HD_HAZARD_SCALE, p, rotation, shadow, flatness)
 	else:
-		_draw_sprite_centered(TRAFFIC_TEXTURES[obstacle["variant"]], pos, visual_scale * HD_VEHICLE_SCALE)
+		var car_flatness: float = lerpf(0.88, 1.0, depth)
+		_draw_angle_sprite_on_road(TRAFFIC_ANGLE_SHEETS[obstacle["variant"]], _angle_frame_for_lane(lane), pos, visual_scale * HD_VEHICLE_SCALE, p, 0.32, car_flatness)
 
 
 func _draw_sky(w: float, hy: float) -> void:
@@ -1088,11 +1146,13 @@ func _draw_finish_tape(p: float) -> void:
 const FLAME_TEX_SCALE := 0.34
 
 
-func _draw_flame_trail(pos: Vector2, scale: float, t: float) -> void:
+func _draw_flame_trail(pos: Vector2, scale: float, t: float, rotation: float = 0.0) -> void:
 	var flicker: float = 0.82 + 0.18 * sin(t * 30.0)
 	var size: Vector2 = TEX_TURBO_EXHAUST.get_size() * (FLAME_TEX_SCALE * scale)
-	var origin: Vector2 = pos + Vector2(0.0, 26.0 * scale)
-	draw_texture_rect(TEX_TURBO_EXHAUST, Rect2(origin - Vector2(size.x * 0.5, 0.0), size), false, Color(1, 1, 1, flicker))
+	var local_origin := Vector2(0.0, 26.0 * scale)
+	draw_set_transform(pos, rotation, Vector2.ONE)
+	draw_texture_rect(TEX_TURBO_EXHAUST, Rect2(local_origin - Vector2(size.x * 0.5, 0.0), size), false, Color(1, 1, 1, flicker))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 # Approved energy-ring sprite, scaled up and faded out over
