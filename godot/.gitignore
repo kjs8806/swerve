@@ -1,5 +1,6 @@
 # Godot 4 local cache/import artifacts - regenerated automatically, never commit.
 .godot/
+*.import
 
 # Export build output (produced by the export-apk workflow / local exports).
 /builds/
