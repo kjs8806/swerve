@@ -516,10 +516,17 @@ func _spawn_obstacle_wave() -> void:
 	else:
 		count = 2 if randf() < 0.5 else 3
 
+	# Coin lanes are excluded too, not just other obstacles' - a coin and an
+	# oncoming car sharing a lane forces the player to choose between the
+	# coin and a collision, which breaks the no-damage full-coin clear a
+	# perfect run should always be able to achieve.
 	var occupied_lanes: Dictionary = {}
 	for o in obstacles:
 		if not o["resolved"]:
 			occupied_lanes[o["lane"]] = true
+	for c in coins_list:
+		if not c["collected"]:
+			occupied_lanes[c["lane"]] = true
 
 	var free_lanes: Array = []
 	for i in range(LANES):
@@ -548,7 +555,22 @@ func _spawn_obstacle_wave() -> void:
 
 
 func _spawn_coins() -> void:
-	var lane := randi() % LANES
+	# Same guard as _spawn_obstacle_wave, from the coin side: never place a
+	# coin in a lane an unresolved obstacle already occupies, so collecting
+	# every coin never requires driving into a car.
+	var occupied_lanes: Dictionary = {}
+	for o in obstacles:
+		if not o["resolved"]:
+			occupied_lanes[o["lane"]] = true
+
+	var free_lanes: Array = []
+	for i in range(LANES):
+		if not occupied_lanes.has(i):
+			free_lanes.append(i)
+	if free_lanes.is_empty():
+		return
+
+	var lane: int = free_lanes[randi() % free_lanes.size()]
 	var run_len := 1 + (randi() % 3)
 	for i in range(run_len):
 		coins_list.append({"lane": lane, "p": -i * 0.06, "collected": false})
