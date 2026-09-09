@@ -75,7 +75,6 @@ const COMBO_BADGE_PEAK_SCALE := COMBO_BADGE_SCALE * 1.12
 
 const HD_VEHICLE_SCALE := 0.45
 const VEHICLE_ANGLE_FRAME_COUNT := 5
-const TEX_PLAYER_ANGLE_SHEET := preload("res://assets/vehicles/player-gray-angle-sheet.png")
 # Every traffic paint variant uses the same approved subtle five-angle geometry.
 # Spawning already chooses uniformly from this array, so all variants can appear.
 const TRAFFIC_ANGLE_SHEETS := [
@@ -163,6 +162,10 @@ var active_level: LevelConfig = LevelCatalog.get_level(0)
 var background_texture: Texture2D
 var highest_unlocked_level: int = 0
 var total_gold: int = 0
+var owned_car_ids: Array[String] = [CarCatalog.DEFAULT_CAR_ID]
+var selected_car_id: String = CarCatalog.DEFAULT_CAR_ID
+var active_car: CarDef = CarCatalog.get_car(CarCatalog.DEFAULT_CAR_ID)
+var race_gold_banked: bool = false
 var level_select: Control
 
 # ---------- HUD refs ----------
@@ -215,6 +218,19 @@ func _load_progress() -> void:
 	if save.load("user://progress.cfg") == OK:
 		highest_unlocked_level = clampi(int(save.get_value("progress", "highest_unlocked", 0)), 0, LevelCatalog.MAIN_LEVEL_COUNT - 1)
 		total_gold = maxi(0, int(save.get_value("economy", "total_gold", 0)))
+		owned_car_ids.clear()
+		var saved_owned: Variant = save.get_value("garage", "owned_car_ids", PackedStringArray([CarCatalog.DEFAULT_CAR_ID]))
+		if saved_owned is Array or saved_owned is PackedStringArray:
+			for saved_id in saved_owned:
+				var car_id := str(saved_id)
+				if CarCatalog.has_car(car_id) and car_id not in owned_car_ids:
+					owned_car_ids.append(car_id)
+		if CarCatalog.DEFAULT_CAR_ID not in owned_car_ids:
+			owned_car_ids.push_front(CarCatalog.DEFAULT_CAR_ID)
+		selected_car_id = str(save.get_value("garage", "selected_car_id", CarCatalog.DEFAULT_CAR_ID))
+		if selected_car_id not in owned_car_ids or not CarCatalog.has_car(selected_car_id):
+			selected_car_id = CarCatalog.DEFAULT_CAR_ID
+	active_car = CarCatalog.get_car(selected_car_id)
 
 
 func _save_progress() -> void:
@@ -223,6 +239,8 @@ func _save_progress() -> void:
 	save.load("user://progress.cfg")
 	save.set_value("progress", "highest_unlocked", highest_unlocked_level)
 	save.set_value("economy", "total_gold", total_gold)
+	save.set_value("garage", "owned_car_ids", PackedStringArray(owned_car_ids))
+	save.set_value("garage", "selected_car_id", selected_car_id)
 	save.save("user://progress.cfg")
 
 
@@ -234,8 +252,40 @@ func _show_level_select() -> void:
 		level_select = LEVEL_SELECT_SCENE.instantiate()
 		$HUD.add_child(level_select)
 		level_select.level_selected.connect(_start_level)
-	level_select.configure(highest_unlocked_level, total_gold)
+		level_select.car_selected.connect(_on_car_selected)
+		level_select.purchase_requested.connect(_on_purchase_requested)
+	level_select.configure(highest_unlocked_level, total_gold, owned_car_ids, selected_car_id)
 	level_select.visible = true
+
+
+func _on_car_selected(car_id: String) -> void:
+	if car_id not in owned_car_ids or not CarCatalog.has_car(car_id):
+		return
+	selected_car_id = car_id
+	active_car = CarCatalog.get_car(selected_car_id)
+	_save_progress()
+	level_select.configure(highest_unlocked_level, total_gold, owned_car_ids, selected_car_id)
+
+
+func _on_purchase_requested(car_id: String) -> void:
+	if not CarCatalog.has_car(car_id):
+		level_select.show_purchase_result("That car is unavailable.", false)
+		return
+	if car_id in owned_car_ids:
+		level_select.show_purchase_result("You already own that car.", false)
+		return
+	var car := CarCatalog.get_car(car_id)
+	if total_gold < car.cost:
+		level_select.show_purchase_result("You need %d more gold." % (car.cost - total_gold), false)
+		return
+	total_gold -= car.cost
+	owned_car_ids.append(car.id)
+	selected_car_id = car.id
+	active_car = car
+	_save_progress()
+	level_select.configure(highest_unlocked_level, total_gold, owned_car_ids, selected_car_id)
+	level_select._open_shop()
+	level_select.show_purchase_result("%s purchased and selected!" % car.display_name, true)
 
 
 func _start_level(level_index: int) -> void:
@@ -246,6 +296,7 @@ func _start_level(level_index: int) -> void:
 		return
 	active_level_index = level_index
 	active_level = selected_level
+	active_car = CarCatalog.get_car(selected_car_id)
 	background_texture = active_level.background_texture
 	level_select.visible = false
 	reset_game(true)
@@ -382,6 +433,7 @@ func reset_game(play_ui_tap: bool = false) -> void:
 	time = 0.0
 	distance = 0.0
 	race_gold = 0
+	race_gold_banked = false
 	combo = 0
 	best_combo = 0
 	player_lane = int((LANES - 1) / 2)
@@ -729,8 +781,6 @@ func _update_game(dt: float) -> void:
 		if c["lane"] == player_lane and c["p"] >= COLLIDE_AT and c["p"] < COLLIDE_AT + 0.05:
 			c["collected"] = true
 			race_gold += 1
-			total_gold += 1
-			_save_progress()
 			coin_punch_t = COIN_PUNCH_DURATION
 			_spawn_spark(Vector2(lane_x(c["lane"], c["p"]), row_y(c["p"])), scale_at(c["p"]), COIN_PICKUP_FX_DURATION, COIN_SPARK_COLOR)
 			_audio_call(&"coin_collected")
@@ -802,6 +852,7 @@ func _update_game(dt: float) -> void:
 
 	if distance >= active_level.finish_distance:
 		state = State.WIN
+		_bank_race_gold()
 		if active_level.advances_progression:
 			highest_unlocked_level = maxi(highest_unlocked_level, mini(active_level_index + 1, LevelCatalog.MAIN_LEVEL_COUNT - 1))
 		_save_progress()
@@ -812,6 +863,7 @@ func _update_game(dt: float) -> void:
 		_show_end_screen(true)
 	elif time >= active_level.race_time:
 		state = State.LOSE
+		_bank_race_gold()
 		_deactivate_turbo()
 		turbo_pickups.clear()
 		_audio_call(&"finish_race", [false])
@@ -831,6 +883,14 @@ func _show_end_screen(won: bool) -> void:
 	]
 
 
+func _bank_race_gold() -> void:
+	if race_gold_banked:
+		return
+	race_gold_banked = true
+	total_gold += race_gold
+	_save_progress()
+
+
 # ---------- HUD ----------
 func _update_hud() -> void:
 	var remaining: float = maxf(0.0, active_level.race_time - time)
@@ -838,7 +898,7 @@ func _update_hud() -> void:
 		_audio_call(&"update_countdown", [remaining])
 	timer_label.text = "%.1f" % remaining
 	timer_label.modulate = Color8(0xff, 0x4d, 0x4d) if remaining < 10.0 else Color8(0xff, 0xcc, 0x33)
-	coin_label.text = "%d" % total_gold
+	coin_label.text = "%d" % (total_gold + (0 if race_gold_banked else race_gold))
 	coin_label.pivot_offset = coin_label.size * 0.5
 	var coin_punch_frac: float = coin_punch_t / COIN_PUNCH_DURATION
 	coin_label.scale = Vector2.ONE * (1.0 + (COIN_PUNCH_SCALE - 1.0) * coin_punch_frac)
@@ -904,7 +964,7 @@ func _draw() -> void:
 	draw_items.append({"p": 1.001, "cb": func():
 		if turbo_now:
 			_draw_flame_trail(Vector2(px, py), p_scale, t_now, player_rotation)
-		_draw_angle_sprite_on_road(TEX_PLAYER_ANGLE_SHEET, _angle_frame_for_lane(player_lane_visual), Vector2(px, py), p_scale * HD_VEHICLE_SCALE, 1.0, 0.34)
+		_draw_angle_sprite_on_road(active_car.angle_sheet, _angle_frame_for_lane(player_lane_visual), Vector2(px, py), p_scale * HD_VEHICLE_SCALE, 1.0, 0.34)
 	})
 
 	draw_items.sort_custom(func(a, b): return a["p"] < b["p"])

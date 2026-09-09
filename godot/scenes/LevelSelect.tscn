@@ -34,12 +34,12 @@ grow_vertical = 2
 
 [node name="Layout" type="VBoxContainer" parent="Backdrop/Panel"]
 layout_mode = 2
-theme_override_constants/separation = 8
+theme_override_constants/separation = 5
 alignment = 1
 
 [node name="Title" type="Label" parent="Backdrop/Panel/Layout"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 34
+theme_override_font_sizes/font_size = 28
 theme_override_colors/font_color = Color(0.25, 0.9, 1, 1)
 text = "CHOOSE YOUR CITY"
 horizontal_alignment = 1
@@ -62,5 +62,88 @@ horizontal_alignment = 1
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/h_separation = 12
-theme_override_constants/v_separation = 8
+theme_override_constants/v_separation = 4
 columns = 5
+
+[node name="CarTitle" type="Label" parent="Backdrop/Panel/Layout"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.25, 0.9, 1, 1)
+text = "SELECT CAR"
+horizontal_alignment = 1
+
+[node name="CarBar" type="HBoxContainer" parent="Backdrop/Panel/Layout"]
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="ShopButton" type="Button" parent="Backdrop/Panel/Layout"]
+custom_minimum_size = Vector2(0, 42)
+layout_mode = 2
+text = "OPEN CAR SHOP"
+
+[node name="ShopOverlay" type="Control" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+
+[node name="Shade" type="ColorRect" parent="ShopOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.005, 0.01, 0.03, 0.94)
+
+[node name="ShopPanel" type="PanelContainer" parent="ShopOverlay/Shade"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -340.0
+offset_top = -240.0
+offset_right = 340.0
+offset_bottom = 240.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Layout" type="VBoxContainer" parent="ShopOverlay/Shade/ShopPanel"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="ShopOverlay/Shade/ShopPanel/Layout"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 30
+theme_override_colors/font_color = Color(0.25, 0.9, 1, 1)
+text = "CAR SHOP"
+horizontal_alignment = 1
+
+[node name="Balance" type="Label" parent="ShopOverlay/Shade/ShopPanel/Layout"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(1, 0.82, 0.2, 1)
+text = "AVAILABLE GOLD  •  0"
+horizontal_alignment = 1
+
+[node name="ShopItems" type="VBoxContainer" parent="ShopOverlay/Shade/ShopPanel/Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="Status" type="Label" parent="ShopOverlay/Shade/ShopPanel/Layout"]
+custom_minimum_size = Vector2(0, 26)
+layout_mode = 2
+horizontal_alignment = 1
+
+[node name="CloseButton" type="Button" parent="ShopOverlay/Shade/ShopPanel/Layout"]
+custom_minimum_size = Vector2(0, 46)
+layout_mode = 2
+text = "BACK TO LEVEL SELECT"
