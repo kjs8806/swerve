@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="LevelConfig" load_steps=3 format=3]
+[ext_resource type="Script" path="res://scripts/LevelConfig.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/environment/mumbai-hd.png" id="2"]
+[resource]
+script = ExtResource("1")
+level_number = 8
+city_name = "Mumbai"
+background_texture = ExtResource("2")
+base_speed_start = 190.0
+base_speed_ramp = 3.2
+base_speed_max = 360.0
+finish_distance = 15300.0
+race_time = 59.0
+obstacle_count_start = 2
+obstacle_count_max = 3
+obstacle_ramp_seconds = 27.0
+obstacle_interval_start = 1.02
+obstacle_interval_end = 0.58
+hazard_chance_start = 0.22
+hazard_chance_end = 0.33
+coin_interval_min = 1.45
+coin_interval_max = 2.2
+coin_run_min = 1
+coin_run_max = 3
+turbo_spawn_min = 11.5
+turbo_spawn_max = 14.5
