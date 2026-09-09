@@ -39,6 +39,8 @@ const FINISH_STRIPE_P_THICKNESS := 0.10
 const LANE_CHANGE_TIME := 0.14
 # 140ms animation + 90ms input lock, plus a 250ms readability buffer.
 const MIN_SAFE_WAVE_INTERVAL := LANE_CHANGE_TIME + 0.09 + 0.25
+const OBSTACLE_OVERLAP_SAMPLE_STEP := 0.025
+const OBSTACLE_OVERLAP_MARGIN := 5.0
 
 # Impact/turbo feedback - kept brief, low-alpha, and/or geometrically
 # confined (see _draw_turbo_ring/_draw_turbo_flash/_draw_speed_lines) so
@@ -119,7 +121,7 @@ enum State { READY, PLAYING, PAUSED, WIN, LOSE }
 var state: int = State.READY
 var time: float = 0.0
 var distance: float = 0.0
-var coins: int = 0
+var race_gold: int = 0
 var combo: int = 0
 var best_combo: int = 0
 var player_lane: int = int((LANES - 1) / 2)
@@ -160,6 +162,7 @@ var active_level_index: int = 0
 var active_level: LevelConfig = LevelCatalog.get_level(0)
 var background_texture: Texture2D
 var highest_unlocked_level: int = 0
+var total_gold: int = 0
 var level_select: Control
 
 # ---------- HUD refs ----------
@@ -211,11 +214,15 @@ func _load_progress() -> void:
 	var save := ConfigFile.new()
 	if save.load("user://progress.cfg") == OK:
 		highest_unlocked_level = clampi(int(save.get_value("progress", "highest_unlocked", 0)), 0, LevelCatalog.LEVELS.size() - 1)
+		total_gold = maxi(0, int(save.get_value("economy", "total_gold", 0)))
 
 
 func _save_progress() -> void:
 	var save := ConfigFile.new()
+	# Preserve future economy fields such as owned/equipped car IDs.
+	save.load("user://progress.cfg")
 	save.set_value("progress", "highest_unlocked", highest_unlocked_level)
+	save.set_value("economy", "total_gold", total_gold)
 	save.save("user://progress.cfg")
 
 
@@ -227,7 +234,7 @@ func _show_level_select() -> void:
 		level_select = LEVEL_SELECT_SCENE.instantiate()
 		$HUD.add_child(level_select)
 		level_select.level_selected.connect(_start_level)
-	level_select.configure(highest_unlocked_level)
+	level_select.configure(highest_unlocked_level, total_gold)
 	level_select.visible = true
 
 
@@ -371,7 +378,7 @@ func reset_game(play_ui_tap: bool = false) -> void:
 	state = State.PLAYING
 	time = 0.0
 	distance = 0.0
-	coins = 0
+	race_gold = 0
 	combo = 0
 	best_combo = 0
 	player_lane = int((LANES - 1) / 2)
@@ -525,16 +532,16 @@ func _unhandled_key_input(event: InputEvent) -> void:
 # previous wave left in flight, and the two together can end up covering
 # every lane at once (verified by simulation: possible with the old
 # per-wave-only logic). Guaranteeing a stronger, simpler invariant instead
-# - at least one lane is always completely free of any unresolved
-# obstacle - makes that structurally impossible regardless of how waves
-# overlap.
+# - at least one lane is always completely free of any visible obstacle -
+# makes that structurally impossible regardless of how waves overlap.
 func _spawn_obstacle_wave() -> void:
 	var count := active_level.obstacle_count_at(time, randf())
 
 	var occupied_lanes: Dictionary = {}
 	for o in obstacles:
-		if not o["resolved"]:
-			occupied_lanes[o["lane"]] = true
+		# Resolved objects still render until REMOVE_AT. Keeping their lanes
+		# occupied prevents a new object from appearing through them.
+		occupied_lanes[o["lane"]] = true
 
 	var free_lanes: Array = []
 	for i in range(LANES):
@@ -552,14 +559,59 @@ func _spawn_obstacle_wave() -> void:
 		free_lanes[i] = free_lanes[j]
 		free_lanes[j] = tmp
 
-	for i in range(count):
+	var spawned: Array = []
+	for lane in free_lanes:
+		if spawned.size() >= count:
+			break
 		var is_hazard := randf() < active_level.hazard_chance_at(time)
-		obstacles.append({
-			"lane": free_lanes[i], "p": 0.0, "resolved": false,
+		var candidate := {
+			"lane": lane, "p": 0.0, "resolved": false,
 			"dodged": false, "was_near": false,
 			"kind": "hazard" if is_hazard else "traffic",
 			"variant": randi() % (HAZARD_TEXTURES.size() if is_hazard else TRAFFIC_ANGLE_SHEETS.size()),
-		})
+		}
+		if _obstacle_path_is_clear(candidate, spawned):
+			spawned.append(candidate)
+
+	obstacles.append_array(spawned)
+
+
+func _obstacle_path_is_clear(candidate: Dictionary, same_wave: Array) -> bool:
+	for existing in obstacles:
+		if _obstacle_paths_overlap(candidate, existing):
+			return false
+	for existing in same_wave:
+		if _obstacle_paths_overlap(candidate, existing):
+			return false
+	return true
+
+
+func _obstacle_paths_overlap(candidate: Dictionary, existing: Dictionary) -> bool:
+	var candidate_p := 0.0
+	var existing_start_p: float = existing["p"]
+	while candidate_p < REMOVE_AT and existing_start_p + candidate_p < REMOVE_AT:
+		var candidate_rect := _obstacle_bounds_at(candidate, candidate_p).grow(OBSTACLE_OVERLAP_MARGIN)
+		var existing_rect := _obstacle_bounds_at(existing, existing_start_p + candidate_p).grow(OBSTACLE_OVERLAP_MARGIN)
+		if candidate_rect.intersects(existing_rect):
+			return true
+		candidate_p += OBSTACLE_OVERLAP_SAMPLE_STEP
+	return false
+
+
+func _obstacle_bounds_at(obstacle: Dictionary, p: float) -> Rect2:
+	var rendered_size: Vector2
+	if obstacle["kind"] == "hazard":
+		var variant: int = int(obstacle["variant"])
+		rendered_size = HAZARD_TEXTURES[variant].get_size() * scale_at(p) * HAZARD_DRAW_SCALES[variant]
+	else:
+		var sheet: Texture2D = TRAFFIC_ANGLE_SHEETS[int(obstacle["variant"])]
+		rendered_size = Vector2(sheet.get_width() / float(VEHICLE_ANGLE_FRAME_COUNT), sheet.get_height()) * scale_at(p) * HD_VEHICLE_SCALE
+	# A square using the longest side is conservative for angled hazards and
+	# transparent sprite padding, guaranteeing visual separation after rotation.
+	var extent := maxf(rendered_size.x, rendered_size.y)
+	var size := Vector2(extent, extent)
+	var pos := Vector2(lane_x(float(obstacle["lane"]), p), row_y(p))
+	return Rect2(pos - size * 0.5, size)
 
 
 func _spawn_coins() -> void:
@@ -673,7 +725,9 @@ func _update_game(dt: float) -> void:
 		c["p"] += dp
 		if c["lane"] == player_lane and c["p"] >= COLLIDE_AT and c["p"] < COLLIDE_AT + 0.05:
 			c["collected"] = true
-			coins += 1
+			race_gold += 1
+			total_gold += 1
+			_save_progress()
 			coin_punch_t = COIN_PUNCH_DURATION
 			_spawn_spark(Vector2(lane_x(c["lane"], c["p"]), row_y(c["p"])), scale_at(c["p"]), COIN_PICKUP_FX_DURATION, COIN_SPARK_COLOR)
 			_audio_call(&"coin_collected")
@@ -768,8 +822,8 @@ func _show_end_screen(won: bool) -> void:
 		else "Try %s again and watch for the open lane." % active_level.city_name)
 	overlay_button.text = "LEVEL SELECT" if won else "TRY AGAIN"
 	var time_used: float = minf(time, active_level.race_time)
-	overlay_stats.text = "Time: %.1fs\nDistance: %d / %d\nCoins: %d\nBest Combo: x%d" % [
-		time_used, int(distance), int(active_level.finish_distance), coins, best_combo,
+	overlay_stats.text = "Time: %.1fs\nDistance: %d / %d\nGold: +%d  •  Total: %d\nBest Combo: x%d" % [
+		time_used, int(distance), int(active_level.finish_distance), race_gold, total_gold, best_combo,
 	]
 
 
@@ -780,7 +834,7 @@ func _update_hud() -> void:
 		_audio_call(&"update_countdown", [remaining])
 	timer_label.text = "%.1f" % remaining
 	timer_label.modulate = Color8(0xff, 0x4d, 0x4d) if remaining < 10.0 else Color8(0xff, 0xcc, 0x33)
-	coin_label.text = "%d" % coins
+	coin_label.text = "%d" % total_gold
 	coin_label.pivot_offset = coin_label.size * 0.5
 	var coin_punch_frac: float = coin_punch_t / COIN_PUNCH_DURATION
 	coin_label.scale = Vector2.ONE * (1.0 + (COIN_PUNCH_SCALE - 1.0) * coin_punch_frac)

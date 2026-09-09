@@ -51,6 +51,13 @@ theme_override_colors/font_color = Color(0.72, 0.81, 0.94, 1)
 text = "1 / 10 CITIES UNLOCKED"
 horizontal_alignment = 1
 
+[node name="GoldLabel" type="Label" parent="Backdrop/Panel/Layout"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(1, 0.82, 0.2, 1)
+text = "GOLD  •  0"
+horizontal_alignment = 1
+
 [node name="LevelGrid" type="GridContainer" parent="Backdrop/Panel/Layout"]
 layout_mode = 2
 size_flags_vertical = 3

@@ -6,12 +6,14 @@ const LOCKED_TINT := Color(0.28, 0.32, 0.4, 0.82)
 
 @onready var grid: GridContainer = $Backdrop/Panel/Layout/LevelGrid
 @onready var progress_label: Label = $Backdrop/Panel/Layout/ProgressLabel
+@onready var gold_label: Label = $Backdrop/Panel/Layout/GoldLabel
 
 
-func configure(highest_unlocked: int) -> void:
+func configure(highest_unlocked: int, total_gold: int) -> void:
 	for child in grid.get_children():
 		child.queue_free()
 	progress_label.text = "%d / %d CITIES UNLOCKED" % [highest_unlocked + 1, LevelCatalog.LEVELS.size()]
+	gold_label.text = "GOLD  •  %d" % total_gold
 
 	for index in range(LevelCatalog.LEVELS.size()):
 		var config := LevelCatalog.get_level(index)
