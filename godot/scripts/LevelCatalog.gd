@@ -1,6 +1,8 @@
 extends RefCounted
 class_name LevelCatalog
 
+const MAIN_LEVEL_COUNT := 10
+
 const LEVELS: Array[LevelConfig] = [
 	preload("res://levels/level_01_sydney.tres"),
 	preload("res://levels/level_02_rio.tres"),
@@ -12,6 +14,7 @@ const LEVELS: Array[LevelConfig] = [
 	preload("res://levels/level_08_mumbai.tres"),
 	preload("res://levels/level_09_hong_kong.tres"),
 	preload("res://levels/level_10_tokyo.tres"),
+	preload("res://levels/level_11_impossible.tres"),
 ]
 
 

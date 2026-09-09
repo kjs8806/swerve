@@ -213,7 +213,7 @@ func _ready() -> void:
 func _load_progress() -> void:
 	var save := ConfigFile.new()
 	if save.load("user://progress.cfg") == OK:
-		highest_unlocked_level = clampi(int(save.get_value("progress", "highest_unlocked", 0)), 0, LevelCatalog.LEVELS.size() - 1)
+		highest_unlocked_level = clampi(int(save.get_value("progress", "highest_unlocked", 0)), 0, LevelCatalog.MAIN_LEVEL_COUNT - 1)
 		total_gold = maxi(0, int(save.get_value("economy", "total_gold", 0)))
 
 
@@ -239,10 +239,13 @@ func _show_level_select() -> void:
 
 
 func _start_level(level_index: int) -> void:
-	if level_index < 0 or level_index > highest_unlocked_level:
+	if level_index < 0 or level_index >= LevelCatalog.LEVELS.size():
+		return
+	var selected_level := LevelCatalog.get_level(level_index)
+	if not selected_level.unlocked_by_default and level_index > highest_unlocked_level:
 		return
 	active_level_index = level_index
-	active_level = LevelCatalog.get_level(level_index)
+	active_level = selected_level
 	background_texture = active_level.background_texture
 	level_select.visible = false
 	reset_game(true)
@@ -799,7 +802,8 @@ func _update_game(dt: float) -> void:
 
 	if distance >= active_level.finish_distance:
 		state = State.WIN
-		highest_unlocked_level = maxi(highest_unlocked_level, mini(active_level_index + 1, LevelCatalog.LEVELS.size() - 1))
+		if active_level.advances_progression:
+			highest_unlocked_level = maxi(highest_unlocked_level, mini(active_level_index + 1, LevelCatalog.MAIN_LEVEL_COUNT - 1))
 		_save_progress()
 		win_flash = 0.5
 		_deactivate_turbo()

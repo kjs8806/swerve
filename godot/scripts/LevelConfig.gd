@@ -4,6 +4,8 @@ class_name LevelConfig
 @export var level_number: int = 1
 @export var city_name: String = "City"
 @export var background_texture: Texture2D
+@export var unlocked_by_default: bool = false
+@export var advances_progression: bool = true
 
 @export_group("Race")
 @export var base_speed_start: float = 150.0

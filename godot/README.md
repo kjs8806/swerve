@@ -12,9 +12,10 @@ godot4 --path godot/
 ```
 
 `scripts/Race.gd` holds the game state, update loop, five-lane perspective
-grid, spawning, collision logic, and rendering. The ten data-driven race
-profiles live in `levels/` as `LevelConfig` resources and are exposed by
-`scripts/LevelCatalog.gd`. `scenes/LevelSelect.tscn` presents the city grid.
+grid, spawning, collision logic, and rendering. The ten-city campaign and the
+always-unlocked Impossible space bonus level use data-driven race profiles in
+`levels/` as `LevelConfig` resources, exposed by `scripts/LevelCatalog.gd`.
+`scenes/LevelSelect.tscn` presents the level grid.
 
 Progression is sequential: completing level N unlocks level N+1. The highest
 unlocked level is stored in `user://progress.cfg`; deleting that file resets

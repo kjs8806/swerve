@@ -10,8 +10,8 @@ var failures: Array[String] = []
 
 
 func _initialize() -> void:
-	if LevelCatalog.LEVELS.size() != 10:
-		_fail("Expected 10 levels, found %d" % LevelCatalog.LEVELS.size())
+	if LevelCatalog.MAIN_LEVEL_COUNT != 10 or LevelCatalog.LEVELS.size() != 11:
+		_fail("Expected 10 campaign levels plus 1 bonus level, found %d total" % LevelCatalog.LEVELS.size())
 
 	var previous_start_speed := -INF
 	var previous_ramp_window := INF
@@ -23,7 +23,7 @@ func _initialize() -> void:
 		previous_ramp_window = config.obstacle_ramp_seconds
 
 	if failures.is_empty():
-		print("LEVEL VALIDATION PASSED: 10 configs, %d simulated waves, no trapped lane states." % (WAVES_PER_LEVEL * LevelCatalog.LEVELS.size()))
+		print("LEVEL VALIDATION PASSED: 11 configs, %d simulated waves, no trapped lane states." % (WAVES_PER_LEVEL * LevelCatalog.LEVELS.size()))
 		quit(0)
 	else:
 		for failure in failures:
@@ -53,6 +53,12 @@ func _validate_config(config: LevelConfig, index: int, previous_speed: float, pr
 		_fail("Global wave interval cannot accommodate two lane-change inputs")
 	if config.coin_interval_min > config.coin_interval_max or config.turbo_spawn_min > config.turbo_spawn_max:
 		_fail("%s has a reversed pickup interval" % prefix)
+	if index < LevelCatalog.MAIN_LEVEL_COUNT:
+		if config.unlocked_by_default or not config.advances_progression:
+			_fail("%s must remain part of sequential campaign progression" % prefix)
+	else:
+		if not config.unlocked_by_default or config.advances_progression:
+			_fail("%s must be an always-unlocked, non-progression bonus" % prefix)
 
 	var no_hit_distance := _distance_possible(config)
 	if no_hit_distance < config.finish_distance:

@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="LevelConfig" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/LevelConfig.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/environment/impossible-space-hd.png" id="2"]
+
+[resource]
+script = ExtResource("1")
+level_number = 11
+city_name = "Impossible"
+background_texture = ExtResource("2")
+unlocked_by_default = true
+advances_progression = false
+base_speed_start = 260.0
+base_speed_ramp = 5.5
+base_speed_max = 520.0
+finish_distance = 21800.0
+race_time = 55.0
+obstacle_count_start = 3
+obstacle_count_max = 3
+obstacle_ramp_seconds = 14.0
+obstacle_interval_start = 0.62
+obstacle_interval_end = 0.48
+hazard_chance_start = 0.32
+hazard_chance_end = 0.45
+coin_interval_min = 2.4
+coin_interval_max = 3.3
+coin_run_min = 1
+coin_run_max = 1
+turbo_spawn_min = 16.0
+turbo_spawn_max = 21.0

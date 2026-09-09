@@ -2,7 +2,8 @@
 
 Levels unlock sequentially. This gives the difficulty curve a predictable
 learning order while keeping replayed cities selectable. Unlock state is saved
-in `user://progress.cfg`.
+in `user://progress.cfg`. The Impossible bonus level is always unlocked and
+does not unlock or skip any city level.
 
 | Level | City | Lighting | Speed start / ramp / max | Time | Finish | Obstacles | Wave interval | Playtest note |
 | ---: | --- | --- | --- | ---: | ---: | --- | --- | --- |
@@ -16,6 +17,7 @@ in `user://progress.cfg`.
 | 8 | Mumbai | Monsoon night | 190 / 3.2 / 360 | 59s | 15,300 | 2 → 3 | 1.02 → 0.58s | Starts under real pressure; deliberate early lane choice is rewarded. |
 | 9 | Hong Kong | Neon night | 200 / 3.5 / 380 | 58s | 16,200 | 2 → 3 | 0.92 → 0.52s | High-speed consistency test with frequent overlapping wave reads. |
 | 10 | Tokyo | Intense neon night | 215 / 3.8 / 405 | 58s | 17,600 | 2 → 3 | 0.82 → 0.48s | Skill check: rapid two/three-wide waves, smallest clean-run margin, still passable. |
+| Bonus | Impossible | Orbital deep space | 260 / 5.5 / 520 | 55s | 21,800 | 3 → 3 | 0.62 → 0.48s | Extreme optional challenge: immediate three-wide pressure, very sparse pickups, and only a narrow clean-run margin. |
 
 ## Fairness contract
 
