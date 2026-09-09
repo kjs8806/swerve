@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="LevelConfig" load_steps=3 format=3]
+[ext_resource type="Script" path="res://scripts/LevelConfig.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/environment/hong-kong-night-hd.png" id="2"]
+[resource]
+script = ExtResource("1")
+level_number = 9
+city_name = "Hong Kong"
+background_texture = ExtResource("2")
+base_speed_start = 200.0
+base_speed_ramp = 3.5
+base_speed_max = 380.0
+finish_distance = 16200.0
+race_time = 58.0
+obstacle_count_start = 2
+obstacle_count_max = 3
+obstacle_ramp_seconds = 24.0
+obstacle_interval_start = 0.92
+obstacle_interval_end = 0.52
+hazard_chance_start = 0.24
+hazard_chance_end = 0.35
+coin_interval_min = 1.55
+coin_interval_max = 2.3
+coin_run_min = 1
+coin_run_max = 3
+turbo_spawn_min = 12.0
+turbo_spawn_max = 15.0

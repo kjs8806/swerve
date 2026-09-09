@@ -7,17 +7,12 @@ extends Node2D
 
 # ---------- Config ----------
 const ComboCalloutConfig := preload("res://scripts/ComboCalloutConfig.gd")
+const LEVEL_SELECT_SCENE := preload("res://scenes/LevelSelect.tscn")
 
 const LANES := 5
 # Five equal lanes: each occupies exactly 20% of the road width at every depth.
 const LANE_EDGES: Array[float] = [-1.0, -0.60, -0.20, 0.20, 0.60, 1.0]
-const RACE_TIME := 60.0
-const FINISH_DISTANCE := 13000.0
 const ROAD_LENGTH := 260.0
-
-const BASE_SPEED_START := 150.0
-const BASE_SPEED_RAMP := 3.2
-const BASE_SPEED_MAX := 340.0
 
 const COLLISION_PENALTY_MULT := 0.22
 const COLLISION_RECOVER_TIME := 1.7
@@ -27,8 +22,6 @@ const TURBO_MULT := 1.9
 const TURBO_GAUGE_MAX := 100.0
 const TURBO_DURATION := 4.2
 const TURBO_DRAIN_PER_SEC := TURBO_GAUGE_MAX / TURBO_DURATION
-const TURBO_SPAWN_MIN := 7.0
-const TURBO_SPAWN_MAX := 11.0
 
 # Near-miss timing is intentionally independent from vehicle artwork scale.
 # Starting slightly earlier keeps the maneuver readable with the larger HD cars.
@@ -44,6 +37,10 @@ const FINISH_REVEAL_RANGE := ROAD_LENGTH * 2.5
 const FINISH_STRIPE_P_THICKNESS := 0.10
 
 const LANE_CHANGE_TIME := 0.14
+# 140ms animation + 90ms input lock, plus a 250ms readability buffer.
+const MIN_SAFE_WAVE_INTERVAL := LANE_CHANGE_TIME + 0.09 + 0.25
+const OBSTACLE_OVERLAP_SAMPLE_STEP := 0.025
+const OBSTACLE_OVERLAP_MARGIN := 5.0
 
 # Impact/turbo feedback - kept brief, low-alpha, and/or geometrically
 # confined (see _draw_turbo_ring/_draw_turbo_flash/_draw_speed_lines) so
@@ -76,8 +73,6 @@ const COMBO_BADGE_SCALE := 0.80
 const COMBO_BADGE_INTRO_SCALE := COMBO_BADGE_SCALE * 0.72
 const COMBO_BADGE_PEAK_SCALE := COMBO_BADGE_SCALE * 1.12
 
-const TEX_BACKGROUND := preload("res://assets/environment/hong-kong-night-hd.png")
-const TEX_GUARDRAILS := preload("res://assets/environment/guardrails.png")
 const HD_VEHICLE_SCALE := 0.45
 const VEHICLE_ANGLE_FRAME_COUNT := 5
 const TEX_PLAYER_ANGLE_SHEET := preload("res://assets/vehicles/player-gray-angle-sheet.png")
@@ -126,7 +121,7 @@ enum State { READY, PLAYING, PAUSED, WIN, LOSE }
 var state: int = State.READY
 var time: float = 0.0
 var distance: float = 0.0
-var coins: int = 0
+var race_gold: int = 0
 var combo: int = 0
 var best_combo: int = 0
 var player_lane: int = int((LANES - 1) / 2)
@@ -163,6 +158,12 @@ var vignette_tex: GradientTexture2D
 var cloud_seeds: Array = []
 var rock_seeds: Array = []
 var audio_controller
+var active_level_index: int = 0
+var active_level: LevelConfig = LevelCatalog.get_level(0)
+var background_texture: Texture2D
+var highest_unlocked_level: int = 0
+var total_gold: int = 0
+var level_select: Control
 
 # ---------- HUD refs ----------
 @onready var timer_label: Label = $HUD/Root/TimerPanel/TimerLabel
@@ -188,6 +189,8 @@ var audio_controller
 
 func _ready() -> void:
 	randomize()
+	_load_progress()
+	background_texture = active_level.background_texture
 	# Audio must never prevent the race scene from starting. Load the optional
 	# controller at runtime so an unavailable decoder/resource degrades to a
 	# silent game instead of making Race.gd fail during its preload phase.
@@ -201,13 +204,58 @@ func _ready() -> void:
 	_build_turbo_segments()
 	btn_left.pressed.connect(func(): try_swerve(-1))
 	btn_right.pressed.connect(func(): try_swerve(1))
-	btn_left.button_down.connect(func(): _set_steer_btn_pressed_visual(btn_left, true))
-	btn_left.button_up.connect(func(): _set_steer_btn_pressed_visual(btn_left, false))
-	btn_right.button_down.connect(func(): _set_steer_btn_pressed_visual(btn_right, true))
-	btn_right.button_up.connect(func(): _set_steer_btn_pressed_visual(btn_right, false))
-	overlay_button.pressed.connect(func(): reset_game(true))
+	overlay_button.pressed.connect(_on_overlay_button_pressed)
 	pause_button.pressed.connect(_toggle_pause)
 	set_process_unhandled_key_input(true)
+	_show_level_select()
+
+
+func _load_progress() -> void:
+	var save := ConfigFile.new()
+	if save.load("user://progress.cfg") == OK:
+		highest_unlocked_level = clampi(int(save.get_value("progress", "highest_unlocked", 0)), 0, LevelCatalog.MAIN_LEVEL_COUNT - 1)
+		total_gold = maxi(0, int(save.get_value("economy", "total_gold", 0)))
+
+
+func _save_progress() -> void:
+	var save := ConfigFile.new()
+	# Preserve future economy fields such as owned/equipped car IDs.
+	save.load("user://progress.cfg")
+	save.set_value("progress", "highest_unlocked", highest_unlocked_level)
+	save.set_value("economy", "total_gold", total_gold)
+	save.save("user://progress.cfg")
+
+
+func _show_level_select() -> void:
+	state = State.READY
+	overlay.visible = false
+	pause_button.visible = false
+	if level_select == null:
+		level_select = LEVEL_SELECT_SCENE.instantiate()
+		$HUD.add_child(level_select)
+		level_select.level_selected.connect(_start_level)
+	level_select.configure(highest_unlocked_level, total_gold)
+	level_select.visible = true
+
+
+func _start_level(level_index: int) -> void:
+	if level_index < 0 or level_index >= LevelCatalog.LEVELS.size():
+		return
+	var selected_level := LevelCatalog.get_level(level_index)
+	if not selected_level.unlocked_by_default and level_index > highest_unlocked_level:
+		return
+	active_level_index = level_index
+	active_level = selected_level
+	background_texture = active_level.background_texture
+	level_select.visible = false
+	reset_game(true)
+
+
+func _on_overlay_button_pressed() -> void:
+	if state == State.WIN:
+		_show_level_select()
+	else:
+		reset_game(true)
 
 
 func _audio_call(method: StringName, args: Array = []) -> void:
@@ -333,7 +381,7 @@ func reset_game(play_ui_tap: bool = false) -> void:
 	state = State.PLAYING
 	time = 0.0
 	distance = 0.0
-	coins = 0
+	race_gold = 0
 	combo = 0
 	best_combo = 0
 	player_lane = int((LANES - 1) / 2)
@@ -360,7 +408,7 @@ func reset_game(play_ui_tap: bool = false) -> void:
 	turbo_pickups.clear()
 	obstacle_timer = 0.6
 	coin_timer = 0.9
-	turbo_spawn_timer = randf_range(TURBO_SPAWN_MIN, TURBO_SPAWN_MAX)
+	turbo_spawn_timer = randf_range(active_level.turbo_spawn_min, active_level.turbo_spawn_max)
 	overlay.visible = false
 	pause_button.visible = true
 	pause_button.texture_normal = TEX_PAUSE_ICON
@@ -376,26 +424,8 @@ func _toggle_pause() -> void:
 		pause_button.texture_normal = TEX_PAUSE_ICON
 
 
-# On top of TextureButton's own pressed-texture swap, punch the button down
-# in scale and brighten it while held, then spring back on release, so it
-# reads as a physical button being pressed rather than just an icon swap.
-func _set_steer_btn_pressed_visual(btn: TextureButton, pressed: bool) -> void:
-	if btn.has_meta("press_tween"):
-		var existing: Tween = btn.get_meta("press_tween")
-		if existing != null and existing.is_valid():
-			existing.kill()
-	var tween := create_tween()
-	btn.set_meta("press_tween", tween)
-	if pressed:
-		tween.tween_property(btn, "scale", Vector2.ONE * 0.90, 0.05).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-		tween.parallel().tween_property(btn, "modulate:a", 0.85, 0.05)
-	else:
-		tween.tween_property(btn, "scale", Vector2.ONE, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-		tween.parallel().tween_property(btn, "modulate:a", 0.5, 0.12)
-
-
 func base_speed() -> float:
-	return minf(BASE_SPEED_MAX, BASE_SPEED_START + BASE_SPEED_RAMP * time)
+	return minf(active_level.base_speed_max, active_level.base_speed_start + active_level.base_speed_ramp * time)
 
 
 func current_speed() -> float:
@@ -492,8 +522,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		elif event.keycode == KEY_RIGHT or event.keycode == KEY_D:
 			try_swerve(1)
 		elif event.keycode == KEY_SPACE or event.keycode == KEY_ENTER:
-			if state != State.PLAYING:
+			if state == State.LOSE:
 				reset_game()
+			elif state == State.WIN or state == State.READY:
+				_show_level_select()
 
 
 # ---------- Spawning ----------
@@ -503,18 +535,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 # previous wave left in flight, and the two together can end up covering
 # every lane at once (verified by simulation: possible with the old
 # per-wave-only logic). Guaranteeing a stronger, simpler invariant instead
-# - at least one lane is always completely free of any unresolved
-# obstacle - makes that structurally impossible regardless of how waves
-# overlap.
+# - at least one lane is always completely free of any visible obstacle -
+# makes that structurally impossible regardless of how waves overlap.
 func _spawn_obstacle_wave() -> void:
-	var t := time
-	var count: int
-	if t < 8.0:
-		count = 1
-	elif t < 20.0:
-		count = 1 if randf() < 0.6 else 2
-	else:
-		count = 2 if randf() < 0.5 else 3
+	var count := active_level.obstacle_count_at(time, randf())
 
 	# Coin lanes are excluded too, not just other obstacles' - a coin and an
 	# oncoming car sharing a lane forces the player to choose between the
@@ -522,8 +546,9 @@ func _spawn_obstacle_wave() -> void:
 	# perfect run should always be able to achieve.
 	var occupied_lanes: Dictionary = {}
 	for o in obstacles:
-		if not o["resolved"]:
-			occupied_lanes[o["lane"]] = true
+		# Resolved objects still render until REMOVE_AT. Keeping their lanes
+		# occupied prevents a new object from appearing through them.
+		occupied_lanes[o["lane"]] = true
 	for c in coins_list:
 		if not c["collected"]:
 			occupied_lanes[c["lane"]] = true
@@ -544,24 +569,69 @@ func _spawn_obstacle_wave() -> void:
 		free_lanes[i] = free_lanes[j]
 		free_lanes[j] = tmp
 
-	for i in range(count):
-		var is_hazard := randf() < 0.32
-		obstacles.append({
-			"lane": free_lanes[i], "p": 0.0, "resolved": false,
+	var spawned: Array = []
+	for lane in free_lanes:
+		if spawned.size() >= count:
+			break
+		var is_hazard := randf() < active_level.hazard_chance_at(time)
+		var candidate := {
+			"lane": lane, "p": 0.0, "resolved": false,
 			"dodged": false, "was_near": false,
 			"kind": "hazard" if is_hazard else "traffic",
 			"variant": randi() % (HAZARD_TEXTURES.size() if is_hazard else TRAFFIC_ANGLE_SHEETS.size()),
-		})
+		}
+		if _obstacle_path_is_clear(candidate, spawned):
+			spawned.append(candidate)
+
+	obstacles.append_array(spawned)
+
+
+func _obstacle_path_is_clear(candidate: Dictionary, same_wave: Array) -> bool:
+	for existing in obstacles:
+		if _obstacle_paths_overlap(candidate, existing):
+			return false
+	for existing in same_wave:
+		if _obstacle_paths_overlap(candidate, existing):
+			return false
+	return true
+
+
+func _obstacle_paths_overlap(candidate: Dictionary, existing: Dictionary) -> bool:
+	var candidate_p := 0.0
+	var existing_start_p: float = existing["p"]
+	while candidate_p < REMOVE_AT and existing_start_p + candidate_p < REMOVE_AT:
+		var candidate_rect := _obstacle_bounds_at(candidate, candidate_p).grow(OBSTACLE_OVERLAP_MARGIN)
+		var existing_rect := _obstacle_bounds_at(existing, existing_start_p + candidate_p).grow(OBSTACLE_OVERLAP_MARGIN)
+		if candidate_rect.intersects(existing_rect):
+			return true
+		candidate_p += OBSTACLE_OVERLAP_SAMPLE_STEP
+	return false
+
+
+func _obstacle_bounds_at(obstacle: Dictionary, p: float) -> Rect2:
+	var rendered_size: Vector2
+	if obstacle["kind"] == "hazard":
+		var variant: int = int(obstacle["variant"])
+		rendered_size = HAZARD_TEXTURES[variant].get_size() * scale_at(p) * HAZARD_DRAW_SCALES[variant]
+	else:
+		var sheet: Texture2D = TRAFFIC_ANGLE_SHEETS[int(obstacle["variant"])]
+		rendered_size = Vector2(sheet.get_width() / float(VEHICLE_ANGLE_FRAME_COUNT), sheet.get_height()) * scale_at(p) * HD_VEHICLE_SCALE
+	# A square using the longest side is conservative for angled hazards and
+	# transparent sprite padding, guaranteeing visual separation after rotation.
+	var extent := maxf(rendered_size.x, rendered_size.y)
+	var size := Vector2(extent, extent)
+	var pos := Vector2(lane_x(float(obstacle["lane"]), p), row_y(p))
+	return Rect2(pos - size * 0.5, size)
 
 
 func _spawn_coins() -> void:
 	# Same guard as _spawn_obstacle_wave, from the coin side: never place a
-	# coin in a lane an unresolved obstacle already occupies, so collecting
-	# every coin never requires driving into a car.
+	# coin in a lane an obstacle already occupies (including one still
+	# resolving/rendering out until REMOVE_AT), so collecting every coin
+	# never requires driving into a car.
 	var occupied_lanes: Dictionary = {}
 	for o in obstacles:
-		if not o["resolved"]:
-			occupied_lanes[o["lane"]] = true
+		occupied_lanes[o["lane"]] = true
 
 	var free_lanes: Array = []
 	for i in range(LANES):
@@ -571,7 +641,7 @@ func _spawn_coins() -> void:
 		return
 
 	var lane: int = free_lanes[randi() % free_lanes.size()]
-	var run_len := 1 + (randi() % 3)
+	var run_len := randi_range(active_level.coin_run_min, active_level.coin_run_max)
 	for i in range(run_len):
 		coins_list.append({"lane": lane, "p": -i * 0.06, "collected": false})
 
@@ -680,7 +750,9 @@ func _update_game(dt: float) -> void:
 		c["p"] += dp
 		if c["lane"] == player_lane and c["p"] >= COLLIDE_AT and c["p"] < COLLIDE_AT + 0.05:
 			c["collected"] = true
-			coins += 1
+			race_gold += 1
+			total_gold += 1
+			_save_progress()
 			coin_punch_t = COIN_PUNCH_DURATION
 			_spawn_spark(Vector2(lane_x(c["lane"], c["p"]), row_y(c["p"])), scale_at(c["p"]), COIN_PICKUP_FX_DURATION, COIN_SPARK_COLOR)
 			_audio_call(&"coin_collected")
@@ -702,29 +774,20 @@ func _update_game(dt: float) -> void:
 		# Stop feeding in new oncoming traffic once the finish line has
 		# scrolled into view, so the final stretch reads as a clear run to
 		# the flag instead of a last-second dodge.
-		if FINISH_DISTANCE - distance > FINISH_REVEAL_RANGE:
+		if active_level.finish_distance - distance > FINISH_REVEAL_RANGE:
 			_spawn_obstacle_wave()
-		var t := time
-		var interval: float
-		if t < 8.0:
-			interval = 1.3
-		elif t < 20.0:
-			interval = 1.0
-		elif t < 40.0:
-			interval = 0.78
-		else:
-			interval = 0.6
-		obstacle_timer = interval * (0.85 + randf() * 0.3)
+		var interval := maxf(MIN_SAFE_WAVE_INTERVAL, active_level.obstacle_interval_at(time))
+		obstacle_timer = maxf(MIN_SAFE_WAVE_INTERVAL, interval * (0.85 + randf() * 0.3))
 
 	coin_timer -= dt
 	if coin_timer <= 0.0:
 		_spawn_coins()
-		coin_timer = 1.6 + randf() * 1.2
+		coin_timer = randf_range(active_level.coin_interval_min, active_level.coin_interval_max)
 
 	turbo_spawn_timer -= dt
 	if turbo_spawn_timer <= 0.0:
 		_spawn_turbo_pickup()
-		turbo_spawn_timer = randf_range(TURBO_SPAWN_MIN, TURBO_SPAWN_MAX)
+		turbo_spawn_timer = randf_range(active_level.turbo_spawn_min, active_level.turbo_spawn_max)
 
 	if hit_flash > 0.0:
 		hit_flash = maxf(0.0, hit_flash - dt)
@@ -759,14 +822,17 @@ func _update_game(dt: float) -> void:
 		if combo_popup_timer <= 0.0:
 			combo_popup.visible = false
 
-	if distance >= FINISH_DISTANCE:
+	if distance >= active_level.finish_distance:
 		state = State.WIN
+		if active_level.advances_progression:
+			highest_unlocked_level = maxi(highest_unlocked_level, mini(active_level_index + 1, LevelCatalog.MAIN_LEVEL_COUNT - 1))
+		_save_progress()
 		win_flash = 0.5
 		_deactivate_turbo()
 		turbo_pickups.clear()
 		_audio_call(&"finish_race", [true])
 		_show_end_screen(true)
-	elif time >= RACE_TIME:
+	elif time >= active_level.race_time:
 		state = State.LOSE
 		_deactivate_turbo()
 		turbo_pickups.clear()
@@ -778,30 +844,30 @@ func _show_end_screen(won: bool) -> void:
 	overlay.visible = true
 	pause_button.visible = false
 	overlay_title.text = "FINISH!" if won else "TIME UP"
-	overlay_subtitle.text = ("You crossed the finish line in time." if won
-		else "You didn't reach the finish line before the clock ran out.")
-	overlay_button.text = "PLAY AGAIN"
-	var time_used: float = minf(time, RACE_TIME)
-	overlay_stats.text = "Time: %.1fs\nDistance: %d / %d\nCoins: %d\nBest Combo: x%d" % [
-		time_used, int(distance), int(FINISH_DISTANCE), coins, best_combo,
+	overlay_subtitle.text = ("Level %d complete — %s mastered." % [active_level.level_number, active_level.city_name] if won
+		else "Try %s again and watch for the open lane." % active_level.city_name)
+	overlay_button.text = "LEVEL SELECT" if won else "TRY AGAIN"
+	var time_used: float = minf(time, active_level.race_time)
+	overlay_stats.text = "Time: %.1fs\nDistance: %d / %d\nGold: +%d  •  Total: %d\nBest Combo: x%d" % [
+		time_used, int(distance), int(active_level.finish_distance), race_gold, total_gold, best_combo,
 	]
 
 
 # ---------- HUD ----------
 func _update_hud() -> void:
-	var remaining: float = maxf(0.0, RACE_TIME - time)
+	var remaining: float = maxf(0.0, active_level.race_time - time)
 	if state == State.PLAYING:
 		_audio_call(&"update_countdown", [remaining])
 	timer_label.text = "%.1f" % remaining
 	timer_label.modulate = Color8(0xff, 0x4d, 0x4d) if remaining < 10.0 else Color8(0xff, 0xcc, 0x33)
-	coin_label.text = "%d" % coins
+	coin_label.text = "%d" % total_gold
 	coin_label.pivot_offset = coin_label.size * 0.5
 	var coin_punch_frac: float = coin_punch_t / COIN_PUNCH_DURATION
 	coin_label.scale = Vector2.ONE * (1.0 + (COIN_PUNCH_SCALE - 1.0) * coin_punch_frac)
 	combo_panel.visible = combo > 0
 	combo_label.text = "%dx" % maxi(1, combo)
 
-	var pct: float = clampf(distance / FINISH_DISTANCE, 0.0, 1.0)
+	var pct: float = clampf(distance / active_level.finish_distance, 0.0, 1.0)
 	var track_w: float = progress_track.size.x
 	# marker_start mirrors the track art's left inset (its leftmost opaque
 	# pixel sits ~3px in) so the marker starts flush with the track's own
@@ -846,7 +912,7 @@ func _draw() -> void:
 	for o in obstacles:
 		draw_items.append({"p": o["p"], "cb": func(): _draw_obstacle(o)})
 
-	var remaining: float = FINISH_DISTANCE - distance
+	var remaining: float = active_level.finish_distance - distance
 	if remaining <= FINISH_REVEAL_RANGE and remaining > -FINISH_REVEAL_RANGE * 0.4:
 		var finish_p: float = 1.0 - remaining / FINISH_REVEAL_RANGE
 		draw_items.append({"p": finish_p, "cb": func(): _draw_finish_tape(finish_p)})
@@ -958,9 +1024,11 @@ func _draw_city_background(w: float, h: float) -> void:
 
 
 func _draw_city_layer(w: float, h: float, zoom: float, x_offset: float, alpha: float) -> void:
+	if background_texture == null:
+		return
 	var size := Vector2(w, h) * zoom
 	var pos := Vector2((w - size.x) * 0.5 + x_offset, (h - size.y) * 0.5)
-	draw_texture_rect(TEX_BACKGROUND, Rect2(pos, size), false, Color(1.0, 1.0, 1.0, alpha))
+	draw_texture_rect(background_texture, Rect2(pos, size), false, Color(1.0, 1.0, 1.0, alpha))
 
 
 func _lane_visual_rotation(lane_index: float, p: float) -> float:
@@ -1083,17 +1151,12 @@ func _guardrail_point(cx: float, hy: float, h: float, p: float, side: float, out
 
 
 func _draw_moving_guardrails(cx: float, hy: float, h: float) -> void:
-	# The rail beams remain structurally continuous while their posts and amber
-	# reflectors advance toward the camera. This produces forward motion without
-	# scrolling the road's lane dividers.
 	const RAIL_SEGMENTS := 28
 	const POST_COUNT := 13
 	const POST_SCROLL_DISTANCE := 230.0
 	var phase: float = fmod(road_scroll / POST_SCROLL_DISTANCE, 1.0)
 
 	for side in [-1.0, 1.0]:
-		# Two cyan metallic beams follow the road perspective, separated from
-		# the white road edge so the ocean remains visible through the gap.
 		for i in range(RAIL_SEGMENTS):
 			var p0: float = float(i) / RAIL_SEGMENTS
 			var p1: float = float(i + 1) / RAIL_SEGMENTS

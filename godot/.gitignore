@@ -7,6 +7,7 @@
 # regenerate with defaults.
 !assets/hud/progress-track-hd.png.import
 !assets/hud/progress-car-hd.png.import
+!assets/environment/*-hd.png.import
 
 # Export build output (produced by the export-apk workflow / local exports).
 /builds/

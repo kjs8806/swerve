@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="LevelConfig" load_steps=3 format=3]
+[ext_resource type="Script" path="res://scripts/LevelConfig.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/environment/rio-hd.png" id="2"]
+[resource]
+script = ExtResource("1")
+level_number = 2
+city_name = "Rio"
+background_texture = ExtResource("2")
+base_speed_start = 130.0
+base_speed_ramp = 2.0
+base_speed_max = 240.0
+finish_distance = 9000.0
+race_time = 64.0
+obstacle_count_start = 1
+obstacle_count_max = 2
+obstacle_ramp_seconds = 50.0
+obstacle_interval_start = 1.85
+obstacle_interval_end = 1.20
+hazard_chance_start = 0.10
+hazard_chance_end = 0.18
+coin_interval_min = 0.9
+coin_interval_max = 1.45
+coin_run_min = 2
+coin_run_max = 4
+turbo_spawn_min = 8.5
+turbo_spawn_max = 11.5
