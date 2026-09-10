@@ -120,9 +120,9 @@ const TEX_RESUME_ICON := preload("res://assets/hud/resume-button.png")
 # reaches FOG_MAX_COVERAGE of the viewport height plus a soft FOG_FEATHER
 # fade-out, staying well above the player's own row (0.8 * height) so the
 # player is never fogged, only what's still further up the road.
-const FOG_MAX_COVERAGE := 0.62
-const FOG_FEATHER := 0.12
-const FOG_MAX_ALPHA := 0.92
+const FOG_MAX_COVERAGE := 0.66
+const FOG_FEATHER := 0.10
+const FOG_MAX_ALPHA := 0.98
 
 enum State { READY, PLAYING, PAUSED, WIN, LOSE }
 

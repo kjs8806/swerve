@@ -28,5 +28,5 @@ coin_run_min = 1
 coin_run_max = 1
 turbo_spawn_min = 16.0
 turbo_spawn_max = 21.0
-fog_density = 0.85
-fog_color = Color(0.42, 0.34, 0.55, 1.0)
+fog_density = 1.0
+fog_color = Color(0.38, 0.3, 0.5, 1.0)
