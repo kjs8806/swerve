@@ -112,8 +112,7 @@ const HAZARD_TEXTURES := [
 	preload("res://assets/obstacles/loose-tire-hd.png"),
 	preload("res://assets/obstacles/traffic-cone-hd.png"),
 ]
-const TEX_PAUSE_ICON := preload("res://assets/hud/pause-button.png")
-const TEX_RESUME_ICON := preload("res://assets/hud/resume-button.png")
+const TEX_MENU_ICON := preload("res://assets/hud/menu-button.svg")
 
 # Fog is a screen-space band anchored at the horizon (y=0), so it reads as
 # distance haze regardless of any single object's p - at fog_density=1.0 it
@@ -194,6 +193,10 @@ var level_select: Control
 @onready var overlay_subtitle: Label = $HUD/Root/Overlay/OverlayCard/OverlaySubtitle
 @onready var overlay_button: Button = $HUD/Root/Overlay/OverlayCard/OverlayButton
 @onready var overlay_stats: Label = $HUD/Root/Overlay/OverlayCard/OverlayStats
+@onready var menu_actions: VBoxContainer = $HUD/Root/Overlay/OverlayCard/MenuActions
+@onready var resume_button: Button = $HUD/Root/Overlay/OverlayCard/MenuActions/ResumeButton
+@onready var restart_button: Button = $HUD/Root/Overlay/OverlayCard/MenuActions/RestartButton
+@onready var exit_level_button: Button = $HUD/Root/Overlay/OverlayCard/MenuActions/ExitLevelButton
 
 
 func _ready() -> void:
@@ -215,6 +218,9 @@ func _ready() -> void:
 	btn_right.pressed.connect(func(): try_swerve(1))
 	overlay_button.pressed.connect(_on_overlay_button_pressed)
 	pause_button.pressed.connect(_toggle_pause)
+	resume_button.pressed.connect(_resume_game)
+	restart_button.pressed.connect(func(): reset_game(true))
+	exit_level_button.pressed.connect(_show_level_select)
 	set_process_unhandled_key_input(true)
 	_show_level_select()
 
@@ -238,6 +244,7 @@ func _save_progress() -> void:
 func _show_level_select() -> void:
 	state = State.READY
 	overlay.visible = false
+	menu_actions.visible = false
 	pause_button.visible = false
 	if level_select == null:
 		level_select = LEVEL_SELECT_SCENE.instantiate()
@@ -419,18 +426,39 @@ func reset_game(play_ui_tap: bool = false) -> void:
 	coin_timer = 0.9
 	turbo_spawn_timer = randf_range(active_level.turbo_spawn_min, active_level.turbo_spawn_max)
 	overlay.visible = false
+	menu_actions.visible = false
+	overlay_button.visible = true
 	pause_button.visible = true
-	pause_button.texture_normal = TEX_PAUSE_ICON
+	pause_button.texture_normal = TEX_MENU_ICON
 	_audio_call(&"begin_race", [play_ui_tap])
 
 
 func _toggle_pause() -> void:
 	if state == State.PLAYING:
-		state = State.PAUSED
-		pause_button.texture_normal = TEX_RESUME_ICON
+		_open_pause_menu()
 	elif state == State.PAUSED:
-		state = State.PLAYING
-		pause_button.texture_normal = TEX_PAUSE_ICON
+		_resume_game()
+
+
+func _open_pause_menu() -> void:
+	state = State.PAUSED
+	overlay.visible = true
+	pause_button.visible = false
+	overlay_title.text = "PAUSED"
+	overlay_subtitle.text = "Level %d  •  %s" % [active_level.level_number, active_level.city_name]
+	overlay_stats.text = ""
+	overlay_button.visible = false
+	menu_actions.visible = true
+
+
+func _resume_game() -> void:
+	if state != State.PAUSED:
+		return
+	state = State.PLAYING
+	overlay.visible = false
+	menu_actions.visible = false
+	overlay_button.visible = true
+	pause_button.visible = true
 
 
 func base_speed() -> float:
@@ -535,6 +563,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 				reset_game()
 			elif state == State.WIN or state == State.READY:
 				_show_level_select()
+		elif event.keycode == KEY_ESCAPE:
+			_toggle_pause()
 
 
 # ---------- Spawning ----------
@@ -852,6 +882,8 @@ func _update_game(dt: float) -> void:
 func _show_end_screen(won: bool) -> void:
 	overlay.visible = true
 	pause_button.visible = false
+	menu_actions.visible = false
+	overlay_button.visible = true
 	overlay_title.text = "FINISH!" if won else "TIME UP"
 	overlay_subtitle.text = ("Level %d complete — %s mastered." % [active_level.level_number, active_level.city_name] if won
 		else "Try %s again and watch for the open lane." % active_level.city_name)
