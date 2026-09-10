@@ -31,6 +31,17 @@ class_name LevelConfig
 @export var turbo_spawn_min: float = 7.0
 @export var turbo_spawn_max: float = 11.0
 
+@export_group("Chaser")
+# The chaser is a pursuit car that closes in when the player coasts and
+# backs off when they push speed/turbo - a dynamic antagonist rather than
+# a static hazard. Off by default; only the hardest levels should enable it.
+@export var has_chaser: bool = false
+@export var chaser_start_gap: float = 0.65
+@export var chaser_close_rate: float = 0.16
+@export var chaser_backoff_rate: float = 0.24
+@export_range(0.0, 1.0) var chaser_cautious_speed_ratio: float = 0.74
+@export_range(0.0, 1.0) var chaser_aggressive_speed_ratio: float = 0.93
+
 
 func difficulty_at(elapsed: float) -> float:
 	return clampf(elapsed / maxf(obstacle_ramp_seconds, 0.1), 0.0, 1.0)

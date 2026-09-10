@@ -115,6 +115,28 @@ const HAZARD_TEXTURES := [
 const TEX_PAUSE_ICON := preload("res://assets/hud/pause-button.png")
 const TEX_RESUME_ICON := preload("res://assets/hud/resume-button.png")
 
+# The chaser rides just behind the player at p > 1.0 (row_y/scale_at both
+# extrapolate correctly past 1.0 - see their definitions), so it reuses the
+# same lane/perspective math as every other road object instead of needing
+# its own screen-space layout.
+const TEX_CHASER_ANGLE_SHEET := preload("res://assets/vehicles/chaser-cop-angle-sheet.png")
+const CHASER_MIN_GAP := 0.0
+const CHASER_MAX_GAP := 1.0
+# row_y(p) crosses the bottom of the viewport around p ~= 1.17-1.2 (it's a
+# lerp against ease_p(p) = pow(p, 1.35), extrapolated past the player's own
+# p=1.0), so capping the offset at 0.16 keeps the chaser mostly on-screen
+# even at maximum danger instead of pushing it past the visible edge. The
+# floor at
+# 0.02 (rather than 0) matters just as much: at p=1.0 exactly the chaser
+# would render at the player's own screen position and size, fully
+# overlapping/replacing it, instead of tucked mostly-behind with just a
+# sliver showing.
+const CHASER_P_OFFSET_MIN := 0.02
+const CHASER_P_OFFSET_MAX := 0.16
+const CHASER_LANE_FOLLOW_RATE := 2.4
+const CHASER_BUST_LANE_TOLERANCE := 0.5
+const CHASER_SIREN_GAP_THRESHOLD := 0.35
+
 enum State { READY, PLAYING, PAUSED, WIN, LOSE }
 
 # ---------- State ----------
@@ -164,6 +186,9 @@ var background_texture: Texture2D
 var highest_unlocked_level: int = 0
 var total_gold: int = 0
 var level_select: Control
+var chaser_gap: float = 1.0
+var chaser_lane_visual: float = float(player_lane)
+var chaser_siren_active: bool = false
 
 # ---------- HUD refs ----------
 @onready var timer_label: Label = $HUD/Root/TimerPanel/TimerLabel
@@ -409,6 +434,11 @@ func reset_game(play_ui_tap: bool = false) -> void:
 	obstacle_timer = 0.6
 	coin_timer = 0.9
 	turbo_spawn_timer = randf_range(active_level.turbo_spawn_min, active_level.turbo_spawn_max)
+	chaser_gap = active_level.chaser_start_gap if active_level.has_chaser else CHASER_MAX_GAP
+	chaser_lane_visual = player_lane_visual
+	if chaser_siren_active:
+		chaser_siren_active = false
+		_audio_call(&"set_chaser_siren", [false])
 	overlay.visible = false
 	pause_button.visible = true
 	pause_button.texture_normal = TEX_PAUSE_ICON
@@ -673,6 +703,50 @@ func _deactivate_turbo(clear_gauge: bool = true) -> void:
 	_audio_call(&"set_turbo", [false])
 
 
+# ---------- Chaser ----------
+# The cop car isn't a hazard to dodge - it's pressure that responds to how
+# the player is driving. Coasting below chaser_cautious_speed_ratio of the
+# level's speed ceiling lets it close in; turbo, a post-near-miss boost, or
+# just driving fast (at/above chaser_aggressive_speed_ratio) pushes it back.
+# Between those two thresholds the gap holds steady, so the player reads a
+# clear "too slow" / "fast enough" band instead of constant jitter.
+func _update_chaser(dt: float, speed: float) -> void:
+	var speed_ratio: float = speed / active_level.base_speed_max
+	var aggressive: bool = is_turbo or boost_t > 0.0 or speed_ratio >= active_level.chaser_aggressive_speed_ratio
+	var cautious: bool = not aggressive and speed_ratio <= active_level.chaser_cautious_speed_ratio
+	if aggressive:
+		chaser_gap = minf(CHASER_MAX_GAP, chaser_gap + active_level.chaser_backoff_rate * dt)
+	elif cautious:
+		chaser_gap = maxf(CHASER_MIN_GAP, chaser_gap - active_level.chaser_close_rate * dt)
+
+	chaser_lane_visual = lerpf(chaser_lane_visual, player_lane_visual, clampf(CHASER_LANE_FOLLOW_RATE * dt, 0.0, 1.0))
+
+	var is_close: bool = chaser_gap <= CHASER_SIREN_GAP_THRESHOLD
+	if is_close != chaser_siren_active:
+		chaser_siren_active = is_close
+		_audio_call(&"set_chaser_siren", [chaser_siren_active])
+
+	# invincible already covers turbo's own window, so a player who reached
+	# minimum gap only by riding turbo can't also get busted the instant it
+	# runs out. A swerve can still save a straight-line chase even at zero
+	# gap, since the chaser needs the same lane as well as the distance.
+	if chaser_gap <= CHASER_MIN_GAP and not invincible \
+			and absf(chaser_lane_visual - player_lane_visual) < CHASER_BUST_LANE_TOLERANCE:
+		_trigger_chaser_bust()
+
+
+func _trigger_chaser_bust() -> void:
+	state = State.LOSE
+	_deactivate_turbo()
+	turbo_pickups.clear()
+	chaser_siren_active = false
+	_audio_call(&"set_chaser_siren", [false])
+	_audio_call(&"chaser_busted")
+	hit_flash = 0.4
+	shake_t = SHAKE_DURATION
+	_show_end_screen(false, true)
+
+
 # ---------- Update ----------
 func _process(delta: float) -> void:
 	elapsed_t += delta
@@ -705,6 +779,9 @@ func _update_game(dt: float) -> void:
 	distance += speed * dt
 	var dp: float = (speed / ROAD_LENGTH) * dt
 	road_scroll += speed * dt
+
+	if active_level.has_chaser:
+		_update_chaser(dt, speed)
 
 	# Obstacles: position always advances, even once resolved (hit or
 	# passed) - otherwise a resolved car freezes in place forever instead
@@ -840,11 +917,12 @@ func _update_game(dt: float) -> void:
 		_show_end_screen(false)
 
 
-func _show_end_screen(won: bool) -> void:
+func _show_end_screen(won: bool, busted: bool = false) -> void:
 	overlay.visible = true
 	pause_button.visible = false
-	overlay_title.text = "FINISH!" if won else "TIME UP"
+	overlay_title.text = "FINISH!" if won else ("BUSTED!" if busted else "TIME UP")
 	overlay_subtitle.text = ("Level %d complete — %s mastered." % [active_level.level_number, active_level.city_name] if won
+		else "The cop caught up - keep your speed up to shake them." if busted
 		else "Try %s again and watch for the open lane." % active_level.city_name)
 	overlay_button.text = "LEVEL SELECT" if won else "TRY AGAIN"
 	var time_used: float = minf(time, active_level.race_time)
@@ -911,6 +989,25 @@ func _draw() -> void:
 		draw_items.append({"p": pickup["p"], "cb": func(): _draw_turbo_pickup(pickup)})
 	for o in obstacles:
 		draw_items.append({"p": o["p"], "cb": func(): _draw_obstacle(o)})
+
+	if active_level.has_chaser:
+		# gap 0 (busted) looms large just behind/below the player; gap 1
+		# (fully backed off) shrinks toward the player's own size/position,
+		# reading as "tucked in mostly out of sight." Position/scale use the
+		# real chaser_p (so it visibly grows and drops lower as danger
+		# rises), but the sort key is pinned just under the player's 1.001
+		# so the player sprite always paints on top of the shared overlap -
+		# without this, at low danger the two nearly coincide and whichever
+		# draws last (the smaller chaser) fully hides the player instead of
+		# the intended "mostly hidden behind, growing more exposed" look.
+		var chaser_p: float = 1.0 + lerpf(CHASER_P_OFFSET_MIN, CHASER_P_OFFSET_MAX, 1.0 - chaser_gap)
+		var chaser_depth: float = clampf(ease_p(chaser_p), 0.0, 1.0)
+		var chaser_flatness: float = lerpf(0.88, 1.0, chaser_depth)
+		draw_items.append({"p": 0.999, "cb": func():
+			_draw_angle_sprite_on_road(TEX_CHASER_ANGLE_SHEET, _angle_frame_for_lane(chaser_lane_visual),
+				Vector2(lane_x(chaser_lane_visual, chaser_p), row_y(chaser_p)),
+				scale_at(chaser_p) * HD_VEHICLE_SCALE, chaser_p, 0.32, chaser_flatness)
+		})
 
 	var remaining: float = active_level.finish_distance - distance
 	if remaining <= FINISH_REVEAL_RANGE and remaining > -FINISH_REVEAL_RANGE * 0.4:
