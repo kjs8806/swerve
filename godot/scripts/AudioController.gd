@@ -19,9 +19,6 @@ const MUSIC_FADE_OUT_TIME := 0.80
 const MUSIC_DUCK_TIME := 0.18
 const TURBO_FADE_IN_TIME := 0.10
 const TURBO_FADE_OUT_TIME := 0.15
-const CHASER_SIREN_DB := -14.0
-const CHASER_SIREN_FADE_IN_TIME := 0.25
-const CHASER_SIREN_FADE_OUT_TIME := 0.35
 const LANE_SOUND_COOLDOWN_MS := 80
 const COLLISION_SOUND_COOLDOWN_MS := 350
 const ROAD_HIT_SOUND_COOLDOWN_MS := 220
@@ -42,23 +39,18 @@ const STREAM_UI_TAP := preload("res://assets/audio/ui-tap.wav")
 const STREAM_RACE_START := preload("res://assets/audio/race-start.wav")
 const STREAM_FINISH_WIN := preload("res://assets/audio/finish-win.wav")
 const STREAM_TIME_UP := preload("res://assets/audio/time-up-failure.wav")
-const STREAM_CHASER_SIREN := preload("res://assets/audio/chaser-siren-loop.ogg")
-const STREAM_CHASER_BUSTED := preload("res://assets/audio/chaser-busted.wav")
 
 var background_music: AudioStreamPlayer
 var combo_voice: AudioStreamPlayer
 var engine_idle: AudioStreamPlayer
 var engine_drive: AudioStreamPlayer
 var turbo_sustain: AudioStreamPlayer
-var chaser_siren: AudioStreamPlayer
 var sfx_players: Dictionary = {}
 var engine_fade: Tween
 var music_fade: Tween
 var turbo_fade: Tween
-var chaser_siren_fade: Tween
 var engine_mode := "stopped"
 var turbo_active := false
-var chaser_siren_active := false
 var last_lane_sound_ms := -LANE_SOUND_COOLDOWN_MS
 var last_collision_sound_ms := -COLLISION_SOUND_COOLDOWN_MS
 var last_road_hit_sound_ms := -ROAD_HIT_SOUND_COOLDOWN_MS
@@ -71,12 +63,10 @@ func _ready() -> void:
 	engine_idle = _make_player("EngineIdle", STREAM_ENGINE_IDLE, ENGINE_IDLE_DB)
 	engine_drive = _make_player("EngineDrive", STREAM_ENGINE_DRIVE, SILENT_DB)
 	turbo_sustain = _make_player("TurboSustain", STREAM_TURBO_SUSTAIN, SILENT_DB)
-	chaser_siren = _make_player("ChaserSiren", STREAM_CHASER_SIREN, SILENT_DB)
 	_set_loop(STREAM_BACKGROUND_MUSIC, true)
 	_set_loop(STREAM_ENGINE_IDLE, true)
 	_set_loop(STREAM_ENGINE_DRIVE, true)
 	_set_loop(STREAM_TURBO_SUSTAIN, true)
-	_set_loop(STREAM_CHASER_SIREN, true)
 
 	_add_sfx("lane_change", STREAM_LANE_CHANGE, -8.0, 2)
 	_add_sfx("coin", STREAM_COIN, -5.0, 4)
@@ -90,7 +80,6 @@ func _ready() -> void:
 	_add_sfx("race_start", STREAM_RACE_START, -3.0)
 	_add_sfx("finish_win", STREAM_FINISH_WIN, -4.0)
 	_add_sfx("time_up", STREAM_TIME_UP, -5.0)
-	_add_sfx("chaser_busted", STREAM_CHASER_BUSTED, -3.0)
 	set_engine_idle()
 
 
@@ -196,35 +185,9 @@ func stop_engine() -> void:
 	fade.tween_property(engine_drive, "volume_db", SILENT_DB, LOOP_FADE_TIME)
 
 
-func set_chaser_siren(active: bool) -> void:
-	if active == chaser_siren_active:
-		return
-	chaser_siren_active = active
-	if chaser_siren_fade != null and chaser_siren_fade.is_valid():
-		chaser_siren_fade.kill()
-	chaser_siren_fade = create_tween()
-	if active:
-		if not chaser_siren.playing:
-			chaser_siren.volume_db = SILENT_DB
-			chaser_siren.play()
-		chaser_siren_fade.tween_property(chaser_siren, "volume_db", CHASER_SIREN_DB, CHASER_SIREN_FADE_IN_TIME)
-	else:
-		chaser_siren_fade.tween_property(chaser_siren, "volume_db", SILENT_DB, CHASER_SIREN_FADE_OUT_TIME)
-		chaser_siren_fade.tween_callback(func(): chaser_siren.stop())
-
-
-func chaser_busted() -> void:
-	set_chaser_siren(false)
-	set_turbo(false)
-	stop_background_music()
-	stop_engine()
-	_play("chaser_busted")
-
-
 func begin_race(play_ui_tap: bool) -> void:
 	_stop_one_shots()
 	set_turbo(false)
-	set_chaser_siren(false)
 	last_countdown_second = -1
 	last_lane_sound_ms = -LANE_SOUND_COOLDOWN_MS
 	last_collision_sound_ms = -COLLISION_SOUND_COOLDOWN_MS
@@ -305,7 +268,6 @@ func update_countdown(remaining: float) -> void:
 
 func finish_race(won: bool) -> void:
 	set_turbo(false)
-	set_chaser_siren(false)
 	stop_background_music()
 	stop_engine()
 	_play("finish_win" if won else "time_up")
