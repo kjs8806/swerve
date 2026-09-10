@@ -115,6 +115,15 @@ const HAZARD_TEXTURES := [
 const TEX_PAUSE_ICON := preload("res://assets/hud/pause-button.png")
 const TEX_RESUME_ICON := preload("res://assets/hud/resume-button.png")
 
+# Fog is a screen-space band anchored at the horizon (y=0), so it reads as
+# distance haze regardless of any single object's p - at fog_density=1.0 it
+# reaches FOG_MAX_COVERAGE of the viewport height plus a soft FOG_FEATHER
+# fade-out, staying well above the player's own row (0.8 * height) so the
+# player is never fogged, only what's still further up the road.
+const FOG_MAX_COVERAGE := 0.62
+const FOG_FEATHER := 0.12
+const FOG_MAX_ALPHA := 0.92
+
 enum State { READY, PLAYING, PAUSED, WIN, LOSE }
 
 # ---------- State ----------
@@ -933,6 +942,8 @@ func _draw() -> void:
 	for item in draw_items:
 		item["cb"].call()
 
+	_draw_fog()
+
 	for fx in spark_fx:
 		_draw_spark_fx(fx)
 
@@ -960,6 +971,20 @@ func _draw_vgrad(rect: Rect2, c_top: Color, c_bottom: Color, steps: int = 16) ->
 		var tt: float = float(i) / float(max(steps - 1, 1))
 		var col := c_top.lerp(c_bottom, tt)
 		draw_rect(Rect2(rect.position.x, rect.position.y + i * step_h, rect.size.x, step_h + 1.0), col)
+
+
+func _draw_fog() -> void:
+	var density: float = active_level.fog_density
+	if density <= 0.0:
+		return
+	var h := get_h()
+	var fog_bottom: float = h * FOG_MAX_COVERAGE * density
+	var feather: float = h * FOG_FEATHER * density
+	var top_color := active_level.fog_color
+	top_color.a = FOG_MAX_ALPHA * density
+	var bottom_color := active_level.fog_color
+	bottom_color.a = 0.0
+	_draw_vgrad(Rect2(0.0, 0.0, get_w(), fog_bottom + feather), top_color, bottom_color, 24)
 
 
 func _draw_dashed_line(p1: Vector2, p2: Vector2, color: Color, width: float, dash: float, gap: float, offset: float) -> void:
