@@ -15,15 +15,18 @@ godot4 --path godot/
 grid, spawning, collision logic, and rendering. The ten-city campaign and the
 always-unlocked Impossible space bonus level use data-driven race profiles in
 `levels/` as `LevelConfig` resources, exposed by `scripts/LevelCatalog.gd`.
-`scenes/LevelSelect.tscn` presents the level grid, owned-car selector, and car
-shop. The starter roster is data-driven through `CarDef` resources in `cars/`.
+`scenes/LevelSelect.tscn` presents a racing-lobby city carousel, progression-
+unlocked car selector, five-slot active-parts loadout, and rotating three-offer
+parts market. The starter car roster remains data-driven through `CarDef`
+resources in `cars/`; purchasable gameplay parts live in `PartCatalog.gd`.
 
 Progression is sequential: completing level N unlocks level N+1. The highest
 unlocked level is stored in `user://progress.cfg`; deleting that file resets
 progress without affecting other settings. A fresh save owns only the Default
-car and starts with zero gold. Gold collected during a race is added to the
-persistent `economy/total_gold` wallet when the race ends. Purchases deduct
-from that wallet, while owned and selected car IDs persist under `garage/`.
+car and starts with zero gold. Comet and Apex unlock through campaign progress.
+Gold collected during a race is added to the persistent wallet when the race
+ends. Part purchases, half-price sales, the five-part inventory, visible shop
+offers, escalating refresh cost, and selected car persist in the same file.
 
 `scenes/Main.tscn` holds the HUD and wires up the swerve/restart buttons.
 Approved production art is stored under `assets/` and is drawn on the existing
@@ -48,9 +51,9 @@ range. Validate object separation with:
 godot4 --headless --path godot --script res://tools/validate_obstacle_spacing.gd
 ```
 
-Validate the fresh-save, purchase, selection, and race-banking behavior with
+Validate the parts catalog and rotating-shop invariants with
 an isolated user-data directory:
 
 ```
-XDG_DATA_HOME=/tmp/swerve-test godot4 --headless --path godot --script res://tools/validate_car_shop.gd
+XDG_DATA_HOME=/tmp/swerve-test godot4 --headless --path godot --script res://tools/validate_parts_shop.gd
 ```

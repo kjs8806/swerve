@@ -31,6 +31,10 @@ class_name LevelConfig
 @export var turbo_spawn_min: float = 7.0
 @export var turbo_spawn_max: float = 11.0
 
+@export_group("Atmosphere")
+@export_range(0.0, 1.0) var fog_density: float = 0.0
+@export var fog_color: Color = Color(0.55, 0.58, 0.66)
+
 
 func difficulty_at(elapsed: float) -> float:
 	return clampf(elapsed / maxf(obstacle_ramp_seconds, 0.1), 0.0, 1.0)

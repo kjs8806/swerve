@@ -12,7 +12,7 @@
 [ext_resource type="FontFile" path="res://assets/fonts/Rajdhani-Bold.ttf" id="10_display_font"]
 [ext_resource type="Shader" path="res://shaders/gradient_text.gdshader" id="11_grad_shader"]
 [ext_resource type="FontFile" path="res://assets/fonts/RacingSansOne-Regular.ttf" id="12_combo_font"]
-[ext_resource type="Texture2D" path="res://assets/hud/pause-button.png" id="13_pause"]
+[ext_resource type="Texture2D" path="res://assets/hud/menu-button.svg" id="13_pause"]
 [ext_resource type="Texture2D" path="res://assets/hud/steer-left-pressed.png" id="15_left_pressed"]
 [ext_resource type="Texture2D" path="res://assets/hud/steer-right-pressed.png" id="16_right_pressed"]
 
@@ -321,6 +321,29 @@ autowrap_mode = 2
 custom_minimum_size = Vector2(0, 52)
 theme_override_font_sizes/font_size = 18
 text = "TAP TO START"
+
+[node name="MenuActions" type="VBoxContainer" parent="HUD/Root/Overlay/OverlayCard"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="ResumeButton" type="Button" parent="HUD/Root/Overlay/OverlayCard/MenuActions"]
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "RESUME"
+
+[node name="RestartButton" type="Button" parent="HUD/Root/Overlay/OverlayCard/MenuActions"]
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "RESTART LEVEL"
+
+[node name="ExitLevelButton" type="Button" parent="HUD/Root/Overlay/OverlayCard/MenuActions"]
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "EXIT LEVEL"
 
 [node name="OverlayStats" type="Label" parent="HUD/Root/Overlay/OverlayCard"]
 theme_override_font_sizes/font_size = 14
