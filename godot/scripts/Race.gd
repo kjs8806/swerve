@@ -1580,10 +1580,11 @@ func _draw_spark_fx(fx: Dictionary) -> void:
 func _draw_coin_loss_fx(fx: Dictionary) -> void:
 	var progress: float = 1.0 - fx["t"] / fx["duration"]
 	var direction: float = -1.0 if int(fx["index"]) % 2 == 0 else 1.0
-	var spread: float = (34.0 + 12.0 * int(fx["index"])) * fx["scale"]
-	var offset := Vector2(direction * spread * progress, (-72.0 * progress + 64.0 * progress * progress) * fx["scale"])
+	var effect_scale: float = float(fx["scale"])
+	var spread: float = (34.0 + 12.0 * int(fx["index"])) * effect_scale
+	var offset: Vector2 = Vector2(direction * spread * progress, (-72.0 * progress + 64.0 * progress * progress) * effect_scale)
 	var alpha: float = clampf(1.0 - progress, 0.0, 1.0)
-	var size := TEX_COIN.get_size() * (fx["scale"] * COIN_DRAW_SCALE * 0.78)
+	var size: Vector2 = TEX_COIN.get_size() * (effect_scale * COIN_DRAW_SCALE * 0.78)
 	draw_texture_rect(TEX_COIN, Rect2(fx["pos"] + offset - size * 0.5, size), false, Color(1.0, 0.62, 0.48, alpha))
 
 
