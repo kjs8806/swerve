@@ -66,6 +66,8 @@ const COIN_SPARK_COLOR := Color(1.0, 0.85, 0.3)
 const COIN_LOSS_FX_DURATION := 0.75
 const HAZARD_COIN_LOSS := 1
 const TRAFFIC_COIN_LOSS := 3
+const TURBO_IMPACT_FX_DURATION := 0.72
+const TURBO_IMPACT_SPARK_COLOR := Color(1.0, 0.58, 0.12)
 
 # Near-miss feedback: same expanding-spark mechanic as a coin pickup (see
 # spark_fx below), positioned at the dodged obstacle, plus a light screen
@@ -629,6 +631,25 @@ func _lose_coins(requested_amount: int, impact_pos: Vector2, impact_scale: float
 	return lost
 
 
+func _launch_obstacle(obstacle: Dictionary) -> void:
+	var lane: float = float(obstacle["lane"])
+	var direction := -1.0 if lane < float(LANES - 1) * 0.5 else 1.0
+	if is_equal_approx(lane, float(LANES - 1) * 0.5):
+		direction = -1.0 if randi() % 2 == 0 else 1.0
+	obstacle["resolved"] = true
+	obstacle["turbo_launched"] = true
+	obstacle["launch_t"] = TURBO_IMPACT_FX_DURATION
+	obstacle["launch_duration"] = TURBO_IMPACT_FX_DURATION
+	obstacle["launch_direction"] = direction
+	obstacle["launch_spin"] = direction * randf_range(5.5, 7.5)
+	var impact_pos := Vector2(lane_x(lane, obstacle["p"]), row_y(obstacle["p"]))
+	_spawn_spark(impact_pos, scale_at(obstacle["p"]) * 1.8, TURBO_IMPACT_FX_DURATION * 0.55, TURBO_IMPACT_SPARK_COLOR)
+	turbo_flash_t = maxf(turbo_flash_t, TURBO_FLASH_DURATION * 0.45)
+	shake_t = maxf(shake_t, SHAKE_DURATION * 0.45)
+	popup_combo("TURBO HIT!", TURBO_IMPACT_SPARK_COLOR)
+	_audio_call(&"collision", [obstacle["kind"] == "hazard"])
+
+
 func popup_combo(text: String, color: Color) -> void:
 	if combo_popup_tween != null and combo_popup_tween.is_valid():
 		combo_popup_tween.kill()
@@ -898,6 +919,9 @@ func _update_game(dt: float) -> void:
 	# passed) - otherwise a resolved car freezes in place forever instead
 	# of continuing off-screen and becoming eligible for removal.
 	for o in obstacles:
+		if o.get("turbo_launched", false):
+			o["launch_t"] = maxf(0.0, float(o["launch_t"]) - dt)
+			continue
 		o["p"] += dp
 		if o["resolved"]:
 			continue
@@ -907,7 +931,7 @@ func _update_game(dt: float) -> void:
 
 		if o["p"] >= COLLIDE_AT and o["lane"] == player_lane:
 			if invincible:
-				o["resolved"] = true
+				_launch_obstacle(o)
 			elif _has_part("phantom_differential") and not phantom_differential_used:
 				o["resolved"] = true
 				phantom_differential_used = true
@@ -946,7 +970,7 @@ func _update_game(dt: float) -> void:
 					if turbo_gauge >= TURBO_GAUGE_MAX:
 						_activate_timed_turbo()
 
-	obstacles = obstacles.filter(func(o): return o["p"] < REMOVE_AT)
+	obstacles = obstacles.filter(func(o): return float(o.get("launch_t", 1.0)) > 0.0 if o.get("turbo_launched", false) else o["p"] < REMOVE_AT)
 
 	for c in coins_list:
 		if c["collected"]:
@@ -1346,13 +1370,13 @@ func _draw_road_shadow(pos: Vector2, rendered_size: Vector2, p: float, strength:
 	draw_colored_polygon(_ellipse_points(shadow_center, radius_x, radius_y, 20), Color(0.01, 0.015, 0.025, alpha))
 
 
-func _draw_sprite_on_road(texture: Texture2D, pos: Vector2, scale: float, p: float, rotation: float = 0.0, shadow_strength: float = 0.0, vertical_scale: float = 1.0) -> void:
+func _draw_sprite_on_road(texture: Texture2D, pos: Vector2, scale: float, p: float, rotation: float = 0.0, shadow_strength: float = 0.0, vertical_scale: float = 1.0, tint: Color = Color.WHITE) -> void:
 	var size: Vector2 = texture.get_size() * scale
 	size.y *= vertical_scale
 	if shadow_strength > 0.0:
 		_draw_road_shadow(pos, size, p, shadow_strength)
 	draw_set_transform(pos, rotation, Vector2.ONE)
-	draw_texture_rect(texture, Rect2(-size * 0.5, size), false, _depth_tint(p))
+	draw_texture_rect(texture, Rect2(-size * 0.5, size), false, _depth_tint(p) * tint)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
@@ -1360,7 +1384,7 @@ func _angle_frame_for_lane(lane_index: float) -> int:
 	return clampi(int(round(lane_index)), 0, VEHICLE_ANGLE_FRAME_COUNT - 1)
 
 
-func _draw_angle_sprite_on_road(sheet: Texture2D, frame_index: int, pos: Vector2, scale: float, p: float, shadow_strength: float = 0.0, vertical_scale: float = 1.0) -> void:
+func _draw_angle_sprite_on_road(sheet: Texture2D, frame_index: int, pos: Vector2, scale: float, p: float, shadow_strength: float = 0.0, vertical_scale: float = 1.0, rotation: float = 0.0, tint: Color = Color.WHITE) -> void:
 	var frame_width: float = sheet.get_width() / float(VEHICLE_ANGLE_FRAME_COUNT)
 	var frame_size := Vector2(frame_width, float(sheet.get_height()))
 	var rendered_size: Vector2 = frame_size * scale
@@ -1368,7 +1392,9 @@ func _draw_angle_sprite_on_road(sheet: Texture2D, frame_index: int, pos: Vector2
 	if shadow_strength > 0.0:
 		_draw_road_shadow(pos, rendered_size, p, shadow_strength)
 	var source := Rect2(Vector2(frame_width * frame_index, 0.0), frame_size)
-	draw_texture_rect_region(sheet, Rect2(pos - rendered_size * 0.5, rendered_size), source, _depth_tint(p))
+	draw_set_transform(pos, rotation, Vector2.ONE)
+	draw_texture_rect_region(sheet, Rect2(-rendered_size * 0.5, rendered_size), source, _depth_tint(p) * tint)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 func _draw_sprite_centered(texture: Texture2D, pos: Vector2, scale: float) -> void:
@@ -1383,14 +1409,24 @@ func _draw_obstacle(obstacle: Dictionary) -> void:
 	var visual_scale: float = scale_at(p)
 	var rotation: float = _lane_visual_rotation(lane, p)
 	var depth: float = clampf(ease_p(p), 0.0, 1.0)
+	var tint := Color.WHITE
+	var launched := bool(obstacle.get("turbo_launched", false))
+	if launched:
+		var launch_progress: float = 1.0 - float(obstacle["launch_t"]) / float(obstacle["launch_duration"])
+		var direction: float = float(obstacle["launch_direction"])
+		var viewport_size := get_viewport_rect().size
+		pos += Vector2(direction * viewport_size.x * 0.48 * ease(launch_progress, 0.65), -sin(launch_progress * PI) * viewport_size.y * 0.20)
+		rotation += float(obstacle["launch_spin"]) * launch_progress
+		visual_scale *= lerpf(1.0, 0.58, launch_progress)
+		tint.a = 1.0 - smoothstep(0.58, 1.0, launch_progress)
 	if obstacle["kind"] == "hazard":
 		var variant: int = int(obstacle["variant"])
 		var flatness: float = lerpf(0.58, 0.92, depth) if variant == 0 else lerpf(0.88, 1.0, depth)
-		var shadow: float = 0.0 if variant == 0 else 0.25
-		_draw_sprite_on_road(HAZARD_TEXTURES[variant], pos, visual_scale * HAZARD_DRAW_SCALES[variant], p, rotation, shadow, flatness)
+		var shadow: float = 0.0 if launched or variant == 0 else 0.25
+		_draw_sprite_on_road(HAZARD_TEXTURES[variant], pos, visual_scale * HAZARD_DRAW_SCALES[variant], p, rotation, shadow, flatness, tint)
 	else:
 		var car_flatness: float = lerpf(0.88, 1.0, depth)
-		_draw_angle_sprite_on_road(TRAFFIC_ANGLE_SHEETS[obstacle["variant"]], _angle_frame_for_lane(lane), pos, visual_scale * HD_VEHICLE_SCALE, p, 0.32, car_flatness)
+		_draw_angle_sprite_on_road(TRAFFIC_ANGLE_SHEETS[obstacle["variant"]], _angle_frame_for_lane(lane), pos, visual_scale * HD_VEHICLE_SCALE, p, 0.0 if launched else 0.32, car_flatness, rotation if launched else 0.0, tint)
 
 
 func _draw_sky(w: float, hy: float) -> void:
