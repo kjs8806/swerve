@@ -15,10 +15,10 @@ godot4 --path godot/
 grid, spawning, collision logic, and rendering. The ten-city campaign and the
 always-unlocked Impossible space bonus level use data-driven race profiles in
 `levels/` as `LevelConfig` resources, exposed by `scripts/LevelCatalog.gd`.
-`scenes/LevelSelect.tscn` presents a racing-lobby city carousel, progression-
-unlocked car selector, five-slot active-parts loadout, and rotating three-offer
-parts market. The starter car roster remains data-driven through `CarDef`
-resources in `cars/`; purchasable gameplay parts live in `PartCatalog.gd`.
+`scenes/LevelSelect.tscn` presents a racing-lobby city carousel, five-slot
+active-parts loadout, and rotating three-offer parts market. The player keeps
+the standard gray car while purchasable gameplay
+parts in `PartCatalog.gd` provide the run-changing abilities.
 
 Progression is sequential: completing level N unlocks level N+1. The highest
 unlocked level is stored in `user://progress.cfg`; deleting that file resets

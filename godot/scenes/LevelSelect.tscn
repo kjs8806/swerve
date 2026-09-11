@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/LevelSelect.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/player-gray-angle-sheet.png" id="2"]
 
 [node name="LevelSelect" type="Control"]
 layout_mode = 3
@@ -126,13 +127,9 @@ horizontal_alignment = 1
 [node name="CarPreview" type="TextureRect" parent="Shade/Margin/Layout/Main/GaragePanel"]
 custom_minimum_size = Vector2(0, 122)
 layout_mode = 2
+texture = ExtResource("2")
 expand_mode = 1
 stretch_mode = 5
-
-[node name="CarButtons" type="HBoxContainer" parent="Shade/Margin/Layout/Main/GaragePanel"]
-layout_mode = 2
-theme_override_constants/separation = 5
-alignment = 1
 
 [node name="LoadoutTitle" type="Label" parent="Shade/Margin/Layout/Main/GaragePanel"]
 layout_mode = 2
@@ -144,6 +141,13 @@ horizontal_alignment = 1
 layout_mode = 2
 theme_override_constants/separation = 4
 alignment = 1
+
+[node name="LoadoutDescription" type="Label" parent="Shade/Margin/Layout/Main/GaragePanel"]
+custom_minimum_size = Vector2(0, 42)
+layout_mode = 2
+autowrap_mode = 2
+horizontal_alignment = 1
+text = "Purchase parts to add abilities to your car."
 
 [node name="Actions" type="HBoxContainer" parent="Shade/Margin/Layout/Main/GaragePanel"]
 layout_mode = 2
@@ -225,9 +229,24 @@ size_flags_vertical = 3
 theme_override_constants/separation = 18
 alignment = 1
 
-[node name="SellPicker" type="OptionButton" parent="ShopOverlay/Shade/Panel/Layout"]
-custom_minimum_size = Vector2(0, 38)
+[node name="ActivePartsTitle" type="Label" parent="ShopOverlay/Shade/Panel/Layout"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "ACTIVE PARTS  •  SELECT ONE TO VIEW OR SELL"
+horizontal_alignment = 1
+
+[node name="ActiveParts" type="HBoxContainer" parent="ShopOverlay/Shade/Panel/Layout"]
+custom_minimum_size = Vector2(0, 78)
+layout_mode = 2
+theme_override_constants/separation = 8
+alignment = 1
+
+[node name="ActivePartDescription" type="Label" parent="ShopOverlay/Shade/Panel/Layout"]
+custom_minimum_size = Vector2(0, 42)
+layout_mode = 2
+autowrap_mode = 2
+text = "Select an active part to view its ability and sell value."
+horizontal_alignment = 1
 
 [node name="Status" type="Label" parent="ShopOverlay/Shade/Panel/Layout"]
 custom_minimum_size = Vector2(0, 24)

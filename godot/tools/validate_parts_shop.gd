@@ -44,6 +44,11 @@ func _validate_transactions() -> void:
 	await process_frame
 	_expect(race.total_gold == 0, "Fresh save must start with zero gold")
 	_expect(race.owned_part_ids.is_empty(), "Fresh save must start without parts")
+	race.active_level_index = 0
+	race.active_level = LevelCatalog.get_level(0)
+	race.distance = race.active_level.finish_distance
+	race._update_game(0.0)
+	_expect(race.lobby_level_index == 1, "Winning level 1 did not make level 2 the lobby default")
 
 	var test_part: Dictionary = PartCatalog.PARTS[0]
 	var test_id := str(test_part["id"])

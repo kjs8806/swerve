@@ -75,6 +75,7 @@ const COMBO_BADGE_PEAK_SCALE := COMBO_BADGE_SCALE * 1.12
 
 const HD_VEHICLE_SCALE := 0.45
 const VEHICLE_ANGLE_FRAME_COUNT := 5
+const TEX_PLAYER_ANGLE_SHEET := preload("res://assets/vehicles/player-gray-angle-sheet.png")
 # Every traffic paint variant uses the same approved subtle five-angle geometry.
 # Spawning already chooses uniformly from this array, so all variants can appear.
 const TRAFFIC_ANGLE_SHEETS := [
@@ -164,9 +165,7 @@ var active_level: LevelConfig = LevelCatalog.get_level(0)
 var background_texture: Texture2D
 var highest_unlocked_level: int = 0
 var total_gold: int = 0
-var owned_car_ids: Array[String] = [CarCatalog.DEFAULT_CAR_ID]
-var selected_car_id: String = CarCatalog.DEFAULT_CAR_ID
-var active_car: CarDef = CarCatalog.get_car(CarCatalog.DEFAULT_CAR_ID)
+var lobby_level_index: int = 0
 var race_gold_banked: bool = false
 var owned_part_ids: Array[String] = []
 var shop_offer_ids: Array[String] = []
@@ -231,36 +230,20 @@ func _load_progress() -> void:
 	if save.load("user://progress.cfg") == OK:
 		highest_unlocked_level = clampi(int(save.get_value("progress", "highest_unlocked", 0)), 0, LevelCatalog.MAIN_LEVEL_COUNT - 1)
 		total_gold = maxi(0, int(save.get_value("economy", "total_gold", 0)))
-		owned_car_ids.clear()
-		var saved_owned: Variant = save.get_value("garage", "owned_car_ids", PackedStringArray([CarCatalog.DEFAULT_CAR_ID]))
-		if saved_owned is Array or saved_owned is PackedStringArray:
-			for saved_id in saved_owned:
-				var car_id := str(saved_id)
-				if CarCatalog.has_car(car_id) and car_id not in owned_car_ids:
-					owned_car_ids.append(car_id)
-		if CarCatalog.DEFAULT_CAR_ID not in owned_car_ids:
-			owned_car_ids.push_front(CarCatalog.DEFAULT_CAR_ID)
-		selected_car_id = str(save.get_value("garage", "selected_car_id", CarCatalog.DEFAULT_CAR_ID))
-		if selected_car_id not in owned_car_ids or not CarCatalog.has_car(selected_car_id):
-			selected_car_id = CarCatalog.DEFAULT_CAR_ID
 		owned_part_ids = _valid_part_ids(save.get_value("garage", "owned_part_ids", PackedStringArray()))
 		shop_offer_ids = _valid_part_ids(save.get_value("shop", "offer_ids", PackedStringArray()))
 		shop_refresh_count = maxi(0, int(save.get_value("shop", "refresh_count", 0)))
 		shop_seed = int(save.get_value("shop", "seed", 73421))
-	_sync_progress_cars()
+	lobby_level_index = highest_unlocked_level
 	if shop_offer_ids.is_empty():
 		_roll_shop()
-	active_car = CarCatalog.get_car(selected_car_id)
 
 
 func _save_progress() -> void:
 	var save := ConfigFile.new()
-	# Preserve future economy fields such as owned/equipped car IDs.
 	save.load("user://progress.cfg")
 	save.set_value("progress", "highest_unlocked", highest_unlocked_level)
 	save.set_value("economy", "total_gold", total_gold)
-	save.set_value("garage", "owned_car_ids", PackedStringArray(owned_car_ids))
-	save.set_value("garage", "selected_car_id", selected_car_id)
 	save.set_value("garage", "owned_part_ids", PackedStringArray(owned_part_ids))
 	save.set_value("shop", "offer_ids", PackedStringArray(shop_offer_ids))
 	save.set_value("shop", "refresh_count", shop_refresh_count)
@@ -278,25 +261,17 @@ func _valid_part_ids(value: Variant) -> Array[String]:
 	return result
 
 
-func _sync_progress_cars() -> void:
-	if highest_unlocked_level >= 3 and "comet" not in owned_car_ids:
-		owned_car_ids.append("comet")
-	if highest_unlocked_level >= 7 and "apex" not in owned_car_ids:
-		owned_car_ids.append("apex")
-
-
 func _roll_shop() -> void:
 	shop_offer_ids = PartCatalog.roll_offers(owned_part_ids, shop_seed, total_gold)
 	shop_seed += 7919
 
 
 func _configure_level_select() -> void:
-	level_select.configure(highest_unlocked_level, total_gold, owned_car_ids, selected_car_id, owned_part_ids, shop_offer_ids, shop_refresh_count)
+	level_select.configure(highest_unlocked_level, total_gold, owned_part_ids, shop_offer_ids, shop_refresh_count)
 
 
 func _show_level_select() -> void:
 	state = State.READY
-	_sync_progress_cars()
 	_save_progress()
 	overlay.visible = false
 	menu_actions.visible = false
@@ -305,21 +280,12 @@ func _show_level_select() -> void:
 		level_select = LEVEL_SELECT_SCENE.instantiate()
 		$HUD.add_child(level_select)
 		level_select.level_selected.connect(_start_level)
-		level_select.car_selected.connect(_on_car_selected)
 		level_select.part_purchase_requested.connect(_on_part_purchase_requested)
 		level_select.part_sell_requested.connect(_on_part_sell_requested)
 		level_select.shop_refresh_requested.connect(_on_shop_refresh_requested)
 	_configure_level_select()
+	level_select.focus_level(lobby_level_index)
 	level_select.visible = true
-
-
-func _on_car_selected(car_id: String) -> void:
-	if car_id not in owned_car_ids or not CarCatalog.has_car(car_id):
-		return
-	selected_car_id = car_id
-	active_car = CarCatalog.get_car(selected_car_id)
-	_save_progress()
-	_configure_level_select()
 
 
 func _on_part_purchase_requested(part_id: String) -> void:
@@ -375,8 +341,8 @@ func _start_level(level_index: int) -> void:
 	if not selected_level.unlocked_by_default and level_index > highest_unlocked_level:
 		return
 	active_level_index = level_index
+	lobby_level_index = level_index
 	active_level = selected_level
-	active_car = CarCatalog.get_car(selected_car_id)
 	background_texture = active_level.background_texture
 	level_select.visible = false
 	reset_game(true)
@@ -974,6 +940,7 @@ func _update_game(dt: float) -> void:
 		_bank_race_gold()
 		if active_level.advances_progression:
 			highest_unlocked_level = maxi(highest_unlocked_level, mini(active_level_index + 1, LevelCatalog.MAIN_LEVEL_COUNT - 1))
+			lobby_level_index = mini(active_level_index + 1, LevelCatalog.MAIN_LEVEL_COUNT - 1)
 		_save_progress()
 		win_flash = 0.5
 		_deactivate_turbo()
@@ -1085,7 +1052,7 @@ func _draw() -> void:
 	draw_items.append({"p": 1.001, "cb": func():
 		if turbo_now:
 			_draw_flame_trail(Vector2(px, py), p_scale, t_now, player_rotation)
-		_draw_angle_sprite_on_road(active_car.angle_sheet, _angle_frame_for_lane(player_lane_visual), Vector2(px, py), p_scale * HD_VEHICLE_SCALE, 1.0, 0.34)
+		_draw_angle_sprite_on_road(TEX_PLAYER_ANGLE_SHEET, _angle_frame_for_lane(player_lane_visual), Vector2(px, py), p_scale * HD_VEHICLE_SCALE, 1.0, 0.34)
 	})
 
 	draw_items.sort_custom(func(a, b): return a["p"] < b["p"])
