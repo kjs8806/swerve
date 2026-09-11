@@ -43,9 +43,9 @@ godot4 --headless --path godot --script res://tools/validate_levels.gd
 
 Traffic and hazards reserve their lanes until they leave the screen, and each
 candidate is projected down the road before spawning to reject any future
-visual overlap. Turbo pickup intervals are level-configured at 8–16 seconds,
-making boosts meaningfully less frequent than the original 4.5–9.5-second
-range. Validate object separation with:
+visual overlap. Turbo no longer spawns as a road pickup: each successful near
+miss adds 12.5% charge, a full gauge activates turbo automatically, and a
+combo-breaking collision clears stored charge. Validate object separation with:
 
 ```
 godot4 --headless --path godot --script res://tools/validate_obstacle_spacing.gd

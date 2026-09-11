@@ -22,6 +22,7 @@ const TURBO_MULT := 1.9
 const TURBO_GAUGE_MAX := 100.0
 const TURBO_DURATION := 4.2
 const TURBO_DRAIN_PER_SEC := TURBO_GAUGE_MAX / TURBO_DURATION
+const NEAR_MISS_TURBO_GAIN := 12.5
 const NITRO_CAPACITOR_SECONDS := 0.25
 const QUICKSHIFT_REQUIRED_CHANGES := 5
 const QUICKSHIFT_BOOST_TIME := 0.9
@@ -93,7 +94,6 @@ const TEX_COIN := preload("res://assets/collectibles/coin.png")
 # draw size is derived from this instead of the raw texture pixel size - a
 # bit larger than the old sprite's on-screen footprint.
 const COIN_DRAW_SCALE := 0.19
-const TEX_TURBO_PICKUP := preload("res://assets/collectibles/turbo-pickup.png")
 const TURBO_SEGMENT_COUNT := 17
 const TEX_TURBO_SEGMENT_RED := preload("res://assets/hud/turbo-segment-red.png")
 const TEX_TURBO_SEGMENT_ORANGE := preload("res://assets/hud/turbo-segment-orange.png")
@@ -149,10 +149,8 @@ var spark_fx: Array = [] # {pos, scale, t, duration, color} - coin pickups + nea
 var road_scroll: float = 0.0
 var obstacles: Array = []
 var coins_list: Array = []
-var turbo_pickups: Array = []
 var obstacle_timer: float = 0.0
 var coin_timer: float = 0.0
-var turbo_spawn_timer: float = 0.0
 var phantom_differential_used := false
 var clean_lane_changes := 0
 var collected_coin_count := 0
@@ -534,10 +532,8 @@ func reset_game(play_ui_tap: bool = false) -> void:
 	road_scroll = 0.0
 	obstacles.clear()
 	coins_list.clear()
-	turbo_pickups.clear()
 	obstacle_timer = 0.6
 	coin_timer = 0.9
-	turbo_spawn_timer = randf_range(active_level.turbo_spawn_min, active_level.turbo_spawn_max)
 	phantom_differential_used = false
 	clean_lane_changes = 0
 	collected_coin_count = 0
@@ -814,12 +810,6 @@ func _spawn_coins() -> void:
 		coins_list.append({"lane": lane, "p": -i * 0.06, "collected": false})
 
 
-func _spawn_turbo_pickup() -> void:
-	# Lane indices keep pickups centered using the live lane geometry.
-	var lane := randi() % LANES
-	turbo_pickups.append({"lane": lane, "p": 0.0, "collected": false})
-
-
 func _activate_timed_turbo() -> void:
 	var was_active := is_turbo
 	turbo_gauge = TURBO_GAUGE_MAX
@@ -900,6 +890,7 @@ func _update_game(dt: float) -> void:
 				penalty_t = COLLISION_RECOVER_TIME * (0.6 if _has_part("rallycore_suspension") else 1.0)
 				boost_t = 0.0
 				combo = 0
+				turbo_gauge = 0.0
 				clean_lane_changes = 0
 				hit_flash = 0.25
 				shake_t = SHAKE_DURATION
@@ -917,6 +908,10 @@ func _update_game(dt: float) -> void:
 				popup_combo(callout["text"], Color(1.0, 0.78, 0.05))
 				_play_combo_badge_fx()
 				_audio_call(&"combo_increased", [combo])
+				if not is_turbo:
+					turbo_gauge = minf(TURBO_GAUGE_MAX, turbo_gauge + NEAR_MISS_TURBO_GAIN)
+					if turbo_gauge >= TURBO_GAUGE_MAX:
+						_activate_timed_turbo()
 
 	obstacles = obstacles.filter(func(o): return o["p"] < REMOVE_AT)
 
@@ -947,16 +942,6 @@ func _update_game(dt: float) -> void:
 
 	coins_list = coins_list.filter(func(c): return not c["collected"] and c["p"] < REMOVE_AT)
 
-	for pickup in turbo_pickups:
-		if pickup["collected"]:
-			continue
-		pickup["p"] += dp
-		if pickup["lane"] == player_lane and pickup["p"] >= COLLIDE_AT and pickup["p"] < COLLIDE_AT + 0.05:
-			pickup["collected"] = true
-			_activate_timed_turbo()
-
-	turbo_pickups = turbo_pickups.filter(func(pickup): return not pickup["collected"] and pickup["p"] < REMOVE_AT)
-
 	obstacle_timer -= dt
 	if obstacle_timer <= 0.0:
 		# Stop feeding in new oncoming traffic once the finish line has
@@ -971,11 +956,6 @@ func _update_game(dt: float) -> void:
 	if coin_timer <= 0.0:
 		_spawn_coins()
 		coin_timer = randf_range(active_level.coin_interval_min, active_level.coin_interval_max)
-
-	turbo_spawn_timer -= dt
-	if turbo_spawn_timer <= 0.0:
-		_spawn_turbo_pickup()
-		turbo_spawn_timer = randf_range(active_level.turbo_spawn_min, active_level.turbo_spawn_max)
 
 	if hit_flash > 0.0:
 		hit_flash = maxf(0.0, hit_flash - dt)
@@ -1019,14 +999,12 @@ func _update_game(dt: float) -> void:
 		_save_progress()
 		win_flash = 0.5
 		_deactivate_turbo()
-		turbo_pickups.clear()
 		_audio_call(&"finish_race", [true])
 		_show_end_screen(true)
 	elif time >= active_level.race_time:
 		state = State.LOSE
 		_bank_race_gold()
 		_deactivate_turbo()
-		turbo_pickups.clear()
 		_audio_call(&"finish_race", [false])
 		_show_end_screen(false)
 
@@ -1106,10 +1084,6 @@ func _draw() -> void:
 		if c["p"] < -0.1:
 			continue
 		draw_items.append({"p": c["p"], "cb": func(): _draw_coin_item(c)})
-	for pickup in turbo_pickups:
-		if pickup["p"] < -0.1:
-			continue
-		draw_items.append({"p": pickup["p"], "cb": func(): _draw_turbo_pickup(pickup)})
 	for o in obstacles:
 		draw_items.append({"p": o["p"], "cb": func(): _draw_obstacle(o)})
 
@@ -1514,14 +1488,6 @@ func _draw_spark_fx(fx: Dictionary) -> void:
 	var col: Color = fx["color"]
 	col.a = alpha * 0.9
 	draw_arc(fx["pos"], radius, 0.0, TAU, 20, col, 3.0 * fx["scale"], true)
-
-
-func _draw_turbo_pickup(pickup: Dictionary) -> void:
-	var p: float = pickup["p"]
-	var pos := Vector2(lane_x(pickup["lane"], p), row_y(p))
-	var pulse := 0.92 + 0.08 * sin(elapsed_t * 7.0 + p * 4.0)
-	var visual_scale := scale_at(p) * 0.30 * pulse
-	_draw_sprite_centered(TEX_TURBO_PICKUP, pos, visual_scale)
 
 
 func _draw_finish_tape(p: float) -> void:

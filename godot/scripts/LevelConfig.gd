@@ -28,8 +28,6 @@ class_name LevelConfig
 @export var coin_interval_max: float = 2.8
 @export_range(1, 5) var coin_run_min: int = 1
 @export_range(1, 5) var coin_run_max: int = 3
-@export var turbo_spawn_min: float = 7.0
-@export var turbo_spawn_max: float = 11.0
 
 @export_group("Atmosphere")
 @export_range(0.0, 1.0) var fog_density: float = 0.0

@@ -51,7 +51,7 @@ func _validate_config(config: LevelConfig, index: int, previous_speed: float, pr
 		_fail("%s minimum wave interval is below %.2fs" % [prefix, MIN_SAFE_WAVE_INTERVAL])
 	if MIN_SAFE_WAVE_INTERVAL < RESPONSE_TIME_FOR_TWO_CHANGES:
 		_fail("Global wave interval cannot accommodate two lane-change inputs")
-	if config.coin_interval_min > config.coin_interval_max or config.turbo_spawn_min > config.turbo_spawn_max:
+	if config.coin_interval_min > config.coin_interval_max:
 		_fail("%s has a reversed pickup interval" % prefix)
 	if index < LevelCatalog.MAIN_LEVEL_COUNT:
 		if config.unlocked_by_default or not config.advances_progression:

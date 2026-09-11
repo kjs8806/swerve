@@ -24,5 +24,3 @@ coin_interval_min = 0.75
 coin_interval_max = 1.25
 coin_run_min = 2
 coin_run_max = 4
-turbo_spawn_min = 8.0
-turbo_spawn_max = 11.0
