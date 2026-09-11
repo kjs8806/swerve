@@ -117,11 +117,13 @@ alignment = 1
 [node name="Previous" type="Button" parent="Shade/Margin/Layout/Main/CityPanel/Carousel"]
 custom_minimum_size = Vector2(180, 42)
 layout_mode = 2
+size_flags_horizontal = 4
 text = "PREVIOUS"
 
 [node name="Next" type="Button" parent="Shade/Margin/Layout/Main/CityPanel/Carousel"]
 custom_minimum_size = Vector2(180, 42)
 layout_mode = 2
+size_flags_horizontal = 4
 text = "NEXT"
 
 [node name="GaragePanel" type="VBoxContainer" parent="Shade/Margin/Layout/Main"]
@@ -176,11 +178,13 @@ theme_override_constants/separation = 8
 [node name="Shop" type="Button" parent="Shade/Margin/Layout/Main/GaragePanel/Actions"]
 custom_minimum_size = Vector2(175, 52)
 layout_mode = 2
+size_flags_horizontal = 4
 text = "PARTS SHOP"
 
 [node name="Start" type="Button" parent="Shade/Margin/Layout/Main/GaragePanel/Actions"]
 custom_minimum_size = Vector2(175, 52)
 layout_mode = 2
+size_flags_horizontal = 4
 theme_override_font_sizes/font_size = 19
 text = "START RACE"
 
@@ -288,14 +292,17 @@ alignment = 1
 [node name="Refresh" type="Button" parent="ShopOverlay/Shade/Panel/Layout/Actions"]
 custom_minimum_size = Vector2(190, 48)
 layout_mode = 2
+size_flags_horizontal = 4
 text = "REFRESH  •  3 GOLD"
 
 [node name="Sell" type="Button" parent="ShopOverlay/Shade/Panel/Layout/Actions"]
 custom_minimum_size = Vector2(190, 48)
 layout_mode = 2
+size_flags_horizontal = 4
 text = "SELL SELECTED"
 
 [node name="Close" type="Button" parent="ShopOverlay/Shade/Panel/Layout/Actions"]
 custom_minimum_size = Vector2(190, 48)
 layout_mode = 2
+size_flags_horizontal = 4
 text = "RETURN TO LOBBY"
