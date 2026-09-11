@@ -105,6 +105,7 @@ func _rebuild_loadout() -> void:
 		var panel := Button.new()
 		panel.custom_minimum_size = Vector2(72, 64)
 		panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		_style_button(panel, false, true)
 		if slot < owned_parts.size():
 			var part := PartCatalog.get_part(owned_parts[slot])
@@ -161,6 +162,7 @@ func _rebuild_shop() -> void:
 		var buy := Button.new()
 		buy.custom_minimum_size = Vector2(175, 44)
 		buy.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		buy.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		buy.text = "BUY  •  %d GOLD" % part["price"]
 		buy.disabled = wallet_gold < int(part["price"]) or owned_parts.size() >= PartCatalog.MAX_OWNED
 		buy.pressed.connect(func(): part_purchase_requested.emit(part_id))
@@ -186,6 +188,7 @@ func _rebuild_active_parts() -> void:
 		var button := Button.new()
 		button.custom_minimum_size = Vector2(72, 64)
 		button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		_style_button(button, false, true)
 		if slot < owned_parts.size():
 			var part_id := owned_parts[slot]
