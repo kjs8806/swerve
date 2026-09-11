@@ -57,10 +57,13 @@ func _ready() -> void:
 
 
 func _draw() -> void:
+	if not is_node_ready():
+		return
 	var city_panel: Control = $Shade/Margin/Layout/Main/CityPanel
 	var garage_panel: Control = $Shade/Margin/Layout/Main/GaragePanel
-	var city_rect := Rect2(to_local(city_panel.global_position) - Vector2(10, 9), city_panel.size + Vector2(20, 18))
-	var garage_rect := Rect2(to_local(garage_panel.global_position) - Vector2(10, 9), garage_panel.size + Vector2(20, 18))
+	var root_position := get_global_rect().position
+	var city_rect := Rect2(city_panel.get_global_rect().position - root_position - Vector2(10, 9), city_panel.size + Vector2(20, 18))
+	var garage_rect := Rect2(garage_panel.get_global_rect().position - root_position - Vector2(10, 9), garage_panel.size + Vector2(20, 18))
 	draw_style_box(_panel_style(Color(PANEL, 0.90), Color("36506a"), 1, 5), city_rect)
 	draw_style_box(_panel_style(Color(PANEL, 0.94), CYAN, 2, 5), garage_rect)
 	var slash_x := garage_rect.position.x + garage_rect.size.x - 62.0
