@@ -22,7 +22,8 @@ const TURBO_MULT := 1.9
 const TURBO_GAUGE_MAX := 100.0
 const TURBO_DURATION := 4.2
 const TURBO_DRAIN_PER_SEC := TURBO_GAUGE_MAX / TURBO_DURATION
-const NEAR_MISS_TURBO_GAIN := 12.5
+const NEAR_MISS_TURBO_GAIN := 20.0
+const ENHANCED_NEAR_MISS_TURBO_GAIN := 25.0
 const NITRO_CAPACITOR_SECONDS := 0.25
 const QUICKSHIFT_REQUIRED_CHANGES := 5
 const QUICKSHIFT_BOOST_TIME := 0.9
@@ -890,7 +891,10 @@ func _update_game(dt: float) -> void:
 				penalty_t = COLLISION_RECOVER_TIME * (0.6 if _has_part("rallycore_suspension") else 1.0)
 				boost_t = 0.0
 				combo = 0
-				turbo_gauge = 0.0
+				if _has_part("impact_reserve"):
+					turbo_gauge *= 0.5
+				else:
+					turbo_gauge = 0.0
 				clean_lane_changes = 0
 				hit_flash = 0.25
 				shake_t = SHAKE_DURATION
@@ -909,7 +913,8 @@ func _update_game(dt: float) -> void:
 				_play_combo_badge_fx()
 				_audio_call(&"combo_increased", [combo])
 				if not is_turbo:
-					turbo_gauge = minf(TURBO_GAUGE_MAX, turbo_gauge + NEAR_MISS_TURBO_GAIN)
+					var charge_gain := ENHANCED_NEAR_MISS_TURBO_GAIN if _has_part("slipstream_coil") else NEAR_MISS_TURBO_GAIN
+					turbo_gauge = minf(TURBO_GAUGE_MAX, turbo_gauge + charge_gain)
 					if turbo_gauge >= TURBO_GAUGE_MAX:
 						_activate_timed_turbo()
 
@@ -919,12 +924,15 @@ func _update_game(dt: float) -> void:
 		if c["collected"]:
 			continue
 		c["p"] += dp
-		if _has_part("flux_magnet") and absi(int(round(float(c["lane"]))) - player_lane) <= 1 and c["p"] >= 0.72:
+		var turbo_vacuum_active := is_turbo and _has_part("turbo_vacuum")
+		if turbo_vacuum_active and c["p"] >= 0.58:
+			c["lane"] = move_toward(float(c["lane"]), float(player_lane), dt * 12.0)
+		elif _has_part("flux_magnet") and absi(int(round(float(c["lane"]))) - player_lane) <= 1 and c["p"] >= 0.72:
 			c["lane"] = move_toward(float(c["lane"]), float(player_lane), dt * 4.0)
 		var lane_distance: int = absi(int(round(float(c["lane"]))) - player_lane)
 		var magnet_collect := _has_part("flux_magnet") and lane_distance <= 1
-		var turbo_vacuum_collect := is_turbo and _has_part("turbo_vacuum")
-		var collect_at := 0.76 if turbo_vacuum_collect else COLLIDE_AT
+		var turbo_vacuum_collect := turbo_vacuum_active
+		var collect_at := 0.92 if turbo_vacuum_collect else COLLIDE_AT
 		if (lane_distance == 0 or magnet_collect or turbo_vacuum_collect) and c["p"] >= collect_at and c["p"] < COLLIDE_AT + 0.05:
 			c["collected"] = true
 			collected_coin_count += 1

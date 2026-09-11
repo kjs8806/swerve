@@ -4,7 +4,7 @@ var failures: Array[String] = []
 
 
 func _initialize() -> void:
-	_expect(PartCatalog.PARTS.size() == 15, "Expected fifteen parts")
+	_expect(PartCatalog.PARTS.size() == 17, "Expected seventeen parts")
 	var ids: Array[String] = []
 	for part in PartCatalog.PARTS:
 		_expect(not ids.has(part["id"]), "Duplicate part ID: %s" % part["id"])
@@ -21,9 +21,11 @@ func _initialize() -> void:
 	for part_id in next_offers:
 		_expect(part_id not in offers, "Refresh repeated an already shown item")
 	var almost_all := ids.duplicate()
-	almost_all.resize(14)
+	almost_all.resize(16)
 	_expect(PartCatalog.roll_offers(almost_all, 99).size() == 1, "Owned parts were not excluded")
 	_expect(float(PartCatalog.get_part("turbo_dynamo")["description"].find("35%")) >= 0, "Turbo Dynamo must extend duration by 35%")
+	_expect(float(PartCatalog.get_part("slipstream_coil")["description"].find("25%")) >= 0, "Slipstream Coil must advertise 25% near-miss charge")
+	_expect(float(PartCatalog.get_part("impact_reserve")["description"].find("half")) >= 0, "Impact Reserve must advertise half-charge retention")
 	await _validate_transactions()
 	if failures.is_empty():
 		print("PARTS SHOP VALIDATION PASSED: catalog, unseen offers, economy transactions, five-slot cap, persistence, pricing, and abilities.")

@@ -140,7 +140,7 @@ func _rebuild_shop() -> void:
 		card_layout.add_theme_constant_override("separation", 6)
 		card.add_child(card_layout)
 		var rarity := Label.new()
-		rarity.text = "//  %s SPEC" % part["rarity"]
+		rarity.text = str(part["rarity"])
 		rarity.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		rarity.add_theme_color_override("font_color", RARITY_COLORS[part["rarity"]])
 		card_layout.add_child(rarity)

@@ -23,6 +23,8 @@ const PARTS := [
 	{"id":"golden_alternator", "name":"Golden Alternator", "price":95, "rarity":"TUNED", "ability":"golden_alternator", "description":"Every 10th collected coin awards 1 bonus gold.", "icon_path":"res://assets/hud/parts/golden-alternator.png"},
 	{"id":"savings_coil", "name":"Savings Coil", "price":75, "rarity":"STANDARD", "ability":"savings_coil", "description":"Reduces every shop refresh cost by 1 gold.", "icon_path":"res://assets/hud/parts/savings-coil.png"},
 	{"id":"nightvision_visor", "name":"NightVision Visor", "price":110, "rarity":"TUNED", "ability":"nightvision", "description":"Cuts fog and rain obstruction in half.", "icon_path":"res://assets/hud/parts/nightvision-visor.png"},
+	{"id":"slipstream_coil", "name":"Slipstream Coil", "price":120, "rarity":"TUNED", "ability":"near_miss_charge", "description":"Near misses fill 25% turbo instead of 20%.", "icon_path":"res://assets/hud/parts/slipstream-coil.png"},
+	{"id":"impact_reserve", "name":"Impact Reserve", "price":140, "rarity":"PROTOTYPE", "ability":"turbo_retention", "description":"Keeps half of your turbo charge when a collision breaks the combo.", "icon_path":"res://assets/hud/parts/impact-reserve.png"},
 ]
 
 
