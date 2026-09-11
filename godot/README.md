@@ -22,11 +22,11 @@ parts in `PartCatalog.gd` provide the run-changing abilities.
 
 Progression is sequential: completing level N unlocks level N+1. The highest
 unlocked level is stored in `user://progress.cfg`; deleting that file resets
-progress without affecting other settings. A fresh save owns only the Default
-car and starts with zero gold. Comet and Apex unlock through campaign progress.
-Gold collected during a race is added to the persistent wallet when the race
-ends. Part purchases, half-price sales, the five-part inventory, visible shop
-offers, escalating refresh cost, and selected car persist in the same file.
+progress without affecting other settings. A fresh save starts with the
+standard gray car and zero gold. Gold collected during a race is added to the
+persistent wallet when the race ends. Part purchases, half-price sales, the
+five-part inventory, visible shop offers, and escalating refresh cost persist
+in the same file.
 
 `scenes/Main.tscn` holds the HUD and wires up the swerve/restart buttons.
 Approved production art is stored under `assets/` and is drawn on the existing

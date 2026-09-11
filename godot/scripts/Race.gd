@@ -670,11 +670,18 @@ func _unhandled_key_input(event: InputEvent) -> void:
 func _spawn_obstacle_wave() -> void:
 	var count := active_level.obstacle_count_at(time, randf())
 
+	# Coin lanes are excluded too, not just other obstacles' - a coin and an
+	# oncoming car sharing a lane forces the player to choose between the
+	# coin and a collision, which breaks the no-damage full-coin clear a
+	# perfect run should always be able to achieve.
 	var occupied_lanes: Dictionary = {}
 	for o in obstacles:
 		# Resolved objects still render until REMOVE_AT. Keeping their lanes
 		# occupied prevents a new object from appearing through them.
 		occupied_lanes[o["lane"]] = true
+	for c in coins_list:
+		if not c["collected"]:
+			occupied_lanes[c["lane"]] = true
 
 	var free_lanes: Array = []
 	for i in range(LANES):
@@ -748,7 +755,22 @@ func _obstacle_bounds_at(obstacle: Dictionary, p: float) -> Rect2:
 
 
 func _spawn_coins() -> void:
-	var lane := randi() % LANES
+	# Same guard as _spawn_obstacle_wave, from the coin side: never place a
+	# coin in a lane an obstacle already occupies (including one still
+	# resolving/rendering out until REMOVE_AT), so collecting every coin
+	# never requires driving into a car.
+	var occupied_lanes: Dictionary = {}
+	for o in obstacles:
+		occupied_lanes[o["lane"]] = true
+
+	var free_lanes: Array = []
+	for i in range(LANES):
+		if not occupied_lanes.has(i):
+			free_lanes.append(i)
+	if free_lanes.is_empty():
+		return
+
+	var lane: int = free_lanes[randi() % free_lanes.size()]
 	var run_len := randi_range(active_level.coin_run_min, active_level.coin_run_max)
 	for i in range(run_len):
 		coins_list.append({"lane": lane, "p": -i * 0.06, "collected": false})
@@ -1058,6 +1080,8 @@ func _draw() -> void:
 	draw_items.sort_custom(func(a, b): return a["p"] < b["p"])
 	for item in draw_items:
 		item["cb"].call()
+	_draw_fog()
+
 	_draw_fog()
 
 	for fx in spark_fx:

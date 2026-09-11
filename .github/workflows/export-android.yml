@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
   push:
     branches-ignore:
-      - "claude/mobile-game-design-7pzuyq"
+      - "main"
     tags:
       - "v*"
 
