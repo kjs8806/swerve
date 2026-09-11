@@ -15,7 +15,13 @@ const PARTS := [
 	{"id":"stormcut_wipers", "name":"StormCut Wipers", "price":70, "rarity":"STANDARD", "ability":"wipers", "description":"Clears most rain from the driver's view.", "atlas":4},
 	{"id":"rallycore_suspension", "name":"RallyCore Suspension", "price":100, "rarity":"TUNED", "ability":"suspension", "description":"Reduces collision slowdown and recovery by 40%.", "atlas":5},
 	{"id":"turbo_dynamo", "name":"Turbo Dynamo", "price":130, "rarity":"PROTOTYPE", "ability":"turbo_duration", "description":"Extends every turbo activation by 35%.", "atlas":6},
-	{"id":"coin_scanner", "name":"Coin Scanner", "price":80, "rarity":"STANDARD", "ability":"coin_scanner", "description":"Highlights coin lanes and spawns coins sooner.", "atlas":7},
+	{"id":"turbo_vacuum", "name":"Turbo Vacuum", "price":150, "rarity":"PROTOTYPE", "ability":"turbo_vacuum", "description":"Collects coins from every lane while turbo is active.", "atlas":0},
+	{"id":"momentum_crown", "name":"Momentum Crown", "price":170, "rarity":"PROTOTYPE", "ability":"momentum_crown", "description":"Coins are worth 3 gold at a 10x combo or higher.", "atlas":1},
+	{"id":"nitro_capacitor", "name":"Nitro Capacitor", "price":125, "rarity":"TUNED", "ability":"nitro_capacitor", "description":"Coins collected during turbo extend it by 0.25 seconds.", "atlas":6},
+	{"id":"phantom_differential", "name":"Phantom Differential", "price":145, "rarity":"PROTOTYPE", "ability":"phantom_differential", "description":"Ignores the first collision in each race.", "atlas":5},
+	{"id":"quickshift_transmission", "name":"Quickshift Transmission", "price":105, "rarity":"TUNED", "ability":"quickshift", "description":"Every 5 clean lane changes grants a short speed boost.", "atlas":3},
+	{"id":"golden_alternator", "name":"Golden Alternator", "price":95, "rarity":"TUNED", "ability":"golden_alternator", "description":"Every 10th collected coin awards 1 bonus gold.", "atlas":1},
+	{"id":"savings_coil", "name":"Savings Coil", "price":75, "rarity":"STANDARD", "ability":"savings_coil", "description":"Reduces every shop refresh cost by 1 gold.", "atlas":7},
 ]
 
 
@@ -39,14 +45,14 @@ static func icon(part: Dictionary) -> AtlasTexture:
 	return texture
 
 
-static func refresh_cost(refresh_count: int) -> int:
-	return REFRESH_BASE_COST + REFRESH_STEP_COST * refresh_count
+static func refresh_cost(refresh_count: int, discounted: bool = false) -> int:
+	return maxi(1, REFRESH_BASE_COST + REFRESH_STEP_COST * refresh_count - (1 if discounted else 0))
 
 
-static func roll_offers(owned_ids: Array[String], rng_seed: int, wallet_gold: int = -1) -> Array[String]:
+static func roll_offers(owned_ids: Array[String], rng_seed: int, wallet_gold: int = -1, excluded_ids: Array[String] = []) -> Array[String]:
 	var pool: Array[String] = []
 	for part in PARTS:
-		if part["id"] not in owned_ids:
+		if part["id"] not in owned_ids and part["id"] not in excluded_ids:
 			pool.append(part["id"])
 	var rng := RandomNumberGenerator.new()
 	rng.seed = rng_seed

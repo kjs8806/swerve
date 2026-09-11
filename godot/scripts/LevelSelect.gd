@@ -126,8 +126,9 @@ func _rebuild_shop() -> void:
 	_clear(offers)
 	shop_gold.text = "%d GOLD" % wallet_gold
 	capacity.text = "PARTS  %d/%d" % [owned_parts.size(), PartCatalog.MAX_OWNED]
-	refresh_button.text = "REFRESH  •  %d GOLD" % PartCatalog.refresh_cost(refresh_count)
-	refresh_button.disabled = wallet_gold < PartCatalog.refresh_cost(refresh_count)
+	var refresh_cost := PartCatalog.refresh_cost(refresh_count, "savings_coil" in owned_parts)
+	refresh_button.text = "REFRESH  •  %d GOLD" % refresh_cost
+	refresh_button.disabled = wallet_gold < refresh_cost
 	for part_id in shop_offers:
 		var part := PartCatalog.get_part(part_id)
 		var card := PanelContainer.new()

@@ -22,6 +22,9 @@ const TURBO_MULT := 1.9
 const TURBO_GAUGE_MAX := 100.0
 const TURBO_DURATION := 4.2
 const TURBO_DRAIN_PER_SEC := TURBO_GAUGE_MAX / TURBO_DURATION
+const NITRO_CAPACITOR_SECONDS := 0.25
+const QUICKSHIFT_REQUIRED_CHANGES := 5
+const QUICKSHIFT_BOOST_TIME := 0.9
 
 # Near-miss timing is intentionally independent from vehicle artwork scale.
 # Starting slightly earlier keeps the maneuver readable with the larger HD cars.
@@ -150,6 +153,9 @@ var turbo_pickups: Array = []
 var obstacle_timer: float = 0.0
 var coin_timer: float = 0.0
 var turbo_spawn_timer: float = 0.0
+var phantom_differential_used := false
+var clean_lane_changes := 0
+var collected_coin_count := 0
 
 var elapsed_t: float = 0.0
 var lane_change_lock_until: int = 0
@@ -169,6 +175,7 @@ var lobby_level_index: int = 0
 var race_gold_banked: bool = false
 var owned_part_ids: Array[String] = []
 var shop_offer_ids: Array[String] = []
+var shop_seen_offer_ids: Array[String] = []
 var shop_refresh_count: int = 0
 var shop_seed: int = 73421
 var level_select: Control
@@ -232,8 +239,11 @@ func _load_progress() -> void:
 		total_gold = maxi(0, int(save.get_value("economy", "total_gold", 0)))
 		owned_part_ids = _valid_part_ids(save.get_value("garage", "owned_part_ids", PackedStringArray()))
 		shop_offer_ids = _valid_part_ids(save.get_value("shop", "offer_ids", PackedStringArray()))
+		shop_seen_offer_ids = _valid_catalog_ids(save.get_value("shop", "seen_offer_ids", PackedStringArray()))
 		shop_refresh_count = maxi(0, int(save.get_value("shop", "refresh_count", 0)))
 		shop_seed = int(save.get_value("shop", "seed", 73421))
+	if shop_seen_offer_ids.is_empty() and not shop_offer_ids.is_empty():
+		shop_seen_offer_ids.assign(shop_offer_ids)
 	lobby_level_index = highest_unlocked_level
 	if shop_offer_ids.is_empty():
 		_roll_shop()
@@ -246,6 +256,7 @@ func _save_progress() -> void:
 	save.set_value("economy", "total_gold", total_gold)
 	save.set_value("garage", "owned_part_ids", PackedStringArray(owned_part_ids))
 	save.set_value("shop", "offer_ids", PackedStringArray(shop_offer_ids))
+	save.set_value("shop", "seen_offer_ids", PackedStringArray(shop_seen_offer_ids))
 	save.set_value("shop", "refresh_count", shop_refresh_count)
 	save.set_value("shop", "seed", shop_seed)
 	save.save("user://progress.cfg")
@@ -261,8 +272,25 @@ func _valid_part_ids(value: Variant) -> Array[String]:
 	return result
 
 
+func _valid_catalog_ids(value: Variant) -> Array[String]:
+	var result: Array[String] = []
+	if value is Array or value is PackedStringArray:
+		for raw_id in value:
+			var part_id := str(raw_id)
+			if PartCatalog.has_part(part_id) and part_id not in result:
+				result.append(part_id)
+	return result
+
+
 func _roll_shop() -> void:
-	shop_offer_ids = PartCatalog.roll_offers(owned_part_ids, shop_seed, total_gold)
+	shop_offer_ids = PartCatalog.roll_offers(owned_part_ids, shop_seed, total_gold, shop_seen_offer_ids)
+	if shop_offer_ids.is_empty():
+		# Start a new rotation only after every currently unowned item has appeared.
+		shop_seen_offer_ids.clear()
+		shop_offer_ids = PartCatalog.roll_offers(owned_part_ids, shop_seed, total_gold)
+	for part_id in shop_offer_ids:
+		if part_id not in shop_seen_offer_ids:
+			shop_seen_offer_ids.append(part_id)
 	shop_seed += 7919
 
 
@@ -322,7 +350,7 @@ func _on_part_sell_requested(part_id: String) -> void:
 
 
 func _on_shop_refresh_requested() -> void:
-	var cost := PartCatalog.refresh_cost(shop_refresh_count)
+	var cost := PartCatalog.refresh_cost(shop_refresh_count, _has_part("savings_coil"))
 	if total_gold < cost:
 		level_select.show_shop_result("Not enough gold to refresh.", false)
 		return
@@ -510,6 +538,9 @@ func reset_game(play_ui_tap: bool = false) -> void:
 	obstacle_timer = 0.6
 	coin_timer = 0.9
 	turbo_spawn_timer = randf_range(active_level.turbo_spawn_min, active_level.turbo_spawn_max)
+	phantom_differential_used = false
+	clean_lane_changes = 0
+	collected_coin_count = 0
 	overlay.visible = false
 	menu_actions.visible = false
 	overlay_button.visible = true
@@ -635,6 +666,10 @@ func try_swerve(dir: int) -> void:
 	lane_anim_from = player_lane_visual
 	player_lane = target
 	lane_anim_t = 0.0
+	clean_lane_changes += 1
+	if _has_part("quickshift_transmission") and clean_lane_changes % QUICKSHIFT_REQUIRED_CHANGES == 0:
+		boost_t = maxf(boost_t, QUICKSHIFT_BOOST_TIME)
+		popup_combo("QUICKSHIFT!", Color(0.2, 0.9, 1.0))
 	_audio_call(&"lane_changed")
 
 
@@ -856,11 +891,16 @@ func _update_game(dt: float) -> void:
 		if o["p"] >= COLLIDE_AT and o["lane"] == player_lane:
 			if invincible:
 				o["resolved"] = true
+			elif _has_part("phantom_differential") and not phantom_differential_used:
+				o["resolved"] = true
+				phantom_differential_used = true
+				popup_combo("PHASED!", Color(0.68, 0.42, 1.0))
 			else:
 				o["resolved"] = true
 				penalty_t = COLLISION_RECOVER_TIME * (0.6 if _has_part("rallycore_suspension") else 1.0)
 				boost_t = 0.0
 				combo = 0
+				clean_lane_changes = 0
 				hit_flash = 0.25
 				shake_t = SHAKE_DURATION
 				popup_combo("HIT!", Color(1.0, 0.3, 0.3))
@@ -888,9 +928,19 @@ func _update_game(dt: float) -> void:
 			c["lane"] = move_toward(float(c["lane"]), float(player_lane), dt * 4.0)
 		var lane_distance: int = absi(int(round(float(c["lane"]))) - player_lane)
 		var magnet_collect := _has_part("flux_magnet") and lane_distance <= 1
-		if (lane_distance == 0 or magnet_collect) and c["p"] >= COLLIDE_AT and c["p"] < COLLIDE_AT + 0.05:
+		var turbo_vacuum_collect := is_turbo and _has_part("turbo_vacuum")
+		var collect_at := 0.76 if turbo_vacuum_collect else COLLIDE_AT
+		if (lane_distance == 0 or magnet_collect or turbo_vacuum_collect) and c["p"] >= collect_at and c["p"] < COLLIDE_AT + 0.05:
 			c["collected"] = true
-			race_gold += 2 if _has_part("golden_gearbox") else 1
+			collected_coin_count += 1
+			var coin_value := 2 if _has_part("golden_gearbox") else 1
+			if _has_part("momentum_crown") and combo >= 10:
+				coin_value = maxi(coin_value, 3)
+			if _has_part("golden_alternator") and collected_coin_count % 10 == 0:
+				coin_value += 1
+			race_gold += coin_value
+			if is_turbo and _has_part("nitro_capacitor"):
+				turbo_gauge = minf(TURBO_GAUGE_MAX, turbo_gauge + TURBO_DRAIN_PER_SEC * NITRO_CAPACITOR_SECONDS)
 			coin_punch_t = COIN_PUNCH_DURATION
 			_spawn_spark(Vector2(lane_x(c["lane"], c["p"]), row_y(c["p"])), scale_at(c["p"]), COIN_PICKUP_FX_DURATION, COIN_SPARK_COLOR)
 			_audio_call(&"coin_collected")
@@ -920,7 +970,7 @@ func _update_game(dt: float) -> void:
 	coin_timer -= dt
 	if coin_timer <= 0.0:
 		_spawn_coins()
-		coin_timer = randf_range(active_level.coin_interval_min, active_level.coin_interval_max) * (0.82 if _has_part("coin_scanner") else 1.0)
+		coin_timer = randf_range(active_level.coin_interval_min, active_level.coin_interval_max)
 
 	turbo_spawn_timer -= dt
 	if turbo_spawn_timer <= 0.0:
@@ -1055,7 +1105,7 @@ func _draw() -> void:
 	for c in coins_list:
 		if c["p"] < -0.1:
 			continue
-		draw_items.append({"p": c["p"], "cb": func(): _draw_scanned_coin(c)})
+		draw_items.append({"p": c["p"], "cb": func(): _draw_coin_item(c)})
 	for pickup in turbo_pickups:
 		if pickup["p"] < -0.1:
 			continue
@@ -1147,11 +1197,9 @@ func _draw_rain_overlay(size: Vector2) -> void:
 			draw_circle(Vector2(x, y), radius, Color(0.82, 0.91, 1.0, 0.10 * intensity), false, 0.8, true)
 
 
-func _draw_scanned_coin(coin: Dictionary) -> void:
+func _draw_coin_item(coin: Dictionary) -> void:
 	var pos := Vector2(lane_x(coin["lane"], coin["p"]), row_y(coin["p"]))
 	var scale := scale_at(coin["p"])
-	if _has_part("coin_scanner") and coin["p"] < 0.72:
-		draw_circle(pos, 24.0 * scale, Color(0.1, 0.9, 1.0, 0.12), false, 2.0)
 	_draw_coin(pos, scale)
 
 

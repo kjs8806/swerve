@@ -4,24 +4,29 @@ var failures: Array[String] = []
 
 
 func _initialize() -> void:
-	_expect(PartCatalog.PARTS.size() == 8, "Expected eight parts")
+	_expect(PartCatalog.PARTS.size() == 14, "Expected fourteen parts")
 	var ids: Array[String] = []
 	for part in PartCatalog.PARTS:
 		_expect(not ids.has(part["id"]), "Duplicate part ID: %s" % part["id"])
 		ids.append(part["id"])
 		_expect(int(part["price"]) > 0, "%s has invalid price" % part["name"])
 		_expect(PartCatalog.icon(part) != null, "%s has no icon" % part["name"])
+	_expect("coin_scanner" not in ids, "Removed Coin Scanner is still in the catalog")
 	var offers := PartCatalog.roll_offers([], 12345)
 	_expect(offers.size() == 3, "A refresh must produce three offers")
 	_expect(offers[0] != offers[1] and offers[1] != offers[2] and offers[0] != offers[2], "Refresh produced duplicates")
 	_expect(PartCatalog.refresh_cost(0) == 3 and PartCatalog.refresh_cost(3) == 9, "Refresh pricing is incorrect")
+	_expect(PartCatalog.refresh_cost(0, true) == 2 and PartCatalog.refresh_cost(3, true) == 8, "Savings Coil discount is incorrect")
+	var next_offers := PartCatalog.roll_offers([], 54321, -1, offers)
+	for part_id in next_offers:
+		_expect(part_id not in offers, "Refresh repeated an already shown item")
 	var almost_all := ids.duplicate()
-	almost_all.resize(7)
+	almost_all.resize(13)
 	_expect(PartCatalog.roll_offers(almost_all, 99).size() == 1, "Owned parts were not excluded")
 	_expect(float(PartCatalog.get_part("turbo_dynamo")["description"].find("35%")) >= 0, "Turbo Dynamo must extend duration by 35%")
 	await _validate_transactions()
 	if failures.is_empty():
-		print("PARTS SHOP VALIDATION PASSED: catalog, economy transactions, five-slot cap, persistence, pricing, and Turbo Dynamo.")
+		print("PARTS SHOP VALIDATION PASSED: catalog, unseen offers, economy transactions, five-slot cap, persistence, pricing, and abilities.")
 		quit(0)
 	else:
 		for failure in failures:
