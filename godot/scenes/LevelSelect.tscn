@@ -112,18 +112,17 @@ text = "CLEAR ROAD  •  OPEN"
 [node name="Carousel" type="HBoxContainer" parent="Shade/Margin/Layout/Main/CityPanel"]
 layout_mode = 2
 theme_override_constants/separation = 8
+alignment = 1
 
 [node name="Previous" type="Button" parent="Shade/Margin/Layout/Main/CityPanel/Carousel"]
-custom_minimum_size = Vector2(0, 42)
+custom_minimum_size = Vector2(180, 42)
 layout_mode = 2
-size_flags_horizontal = 3
-text = "◀  PREVIOUS"
+text = "PREVIOUS"
 
 [node name="Next" type="Button" parent="Shade/Margin/Layout/Main/CityPanel/Carousel"]
-custom_minimum_size = Vector2(0, 42)
+custom_minimum_size = Vector2(180, 42)
 layout_mode = 2
-size_flags_horizontal = 3
-text = "NEXT  ▶"
+text = "NEXT"
 
 [node name="GaragePanel" type="VBoxContainer" parent="Shade/Margin/Layout/Main"]
 custom_minimum_size = Vector2(382, 0)
@@ -171,19 +170,17 @@ text = "Purchase parts to add abilities to your car."
 [node name="Actions" type="HBoxContainer" parent="Shade/Margin/Layout/Main/GaragePanel"]
 layout_mode = 2
 size_flags_vertical = 3
-alignment = 2
+alignment = 1
 theme_override_constants/separation = 8
 
 [node name="Shop" type="Button" parent="Shade/Margin/Layout/Main/GaragePanel/Actions"]
-custom_minimum_size = Vector2(0, 52)
+custom_minimum_size = Vector2(175, 52)
 layout_mode = 2
-size_flags_horizontal = 3
 text = "PARTS SHOP"
 
 [node name="Start" type="Button" parent="Shade/Margin/Layout/Main/GaragePanel/Actions"]
-custom_minimum_size = Vector2(0, 52)
+custom_minimum_size = Vector2(175, 52)
 layout_mode = 2
-size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 19
 text = "START RACE"
 
@@ -286,21 +283,19 @@ horizontal_alignment = 1
 [node name="Actions" type="HBoxContainer" parent="ShopOverlay/Shade/Panel/Layout"]
 layout_mode = 2
 theme_override_constants/separation = 10
+alignment = 1
 
 [node name="Refresh" type="Button" parent="ShopOverlay/Shade/Panel/Layout/Actions"]
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(190, 48)
 layout_mode = 2
-size_flags_horizontal = 3
 text = "REFRESH  •  3 GOLD"
 
 [node name="Sell" type="Button" parent="ShopOverlay/Shade/Panel/Layout/Actions"]
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(190, 48)
 layout_mode = 2
-size_flags_horizontal = 3
 text = "SELL SELECTED"
 
 [node name="Close" type="Button" parent="ShopOverlay/Shade/Panel/Layout/Actions"]
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(190, 48)
 layout_mode = 2
-size_flags_horizontal = 3
 text = "RETURN TO LOBBY"
