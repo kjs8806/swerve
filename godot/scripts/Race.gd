@@ -17,7 +17,6 @@ const ROAD_LENGTH := 260.0
 const COLLISION_PENALTY_MULT := 0.22
 const COLLISION_RECOVER_TIME := 1.7
 const BOOST_MULT := 1.28
-const BOOST_TIME := 1.4
 const TURBO_MULT := 1.9
 const TURBO_GAUGE_MAX := 100.0
 const TURBO_DURATION := 4.2
@@ -955,7 +954,6 @@ func _update_game(dt: float) -> void:
 		elif o["p"] >= PASS_AT:
 			o["resolved"] = true
 			if o["dodged"] or o["was_near"]:
-				boost_t = BOOST_TIME
 				combo += 1
 				best_combo = maxi(best_combo, combo)
 				near_miss_flash = NEAR_MISS_FLASH_DURATION
