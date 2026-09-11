@@ -7,6 +7,11 @@ signal shop_refresh_requested
 
 const LOCKED_TINT := Color(0.20, 0.23, 0.31, 0.86)
 const RARITY_COLORS := {"STANDARD": Color("35d8ff"), "TUNED": Color("a968ff"), "PROTOTYPE": Color("ffcf42")}
+const CYAN := Color("20d9ff")
+const YELLOW := Color("ffd447")
+const INK := Color("07101c")
+const PANEL := Color("101b2a")
+const PANEL_HOVER := Color("172b40")
 
 @onready var backdrop: TextureRect = $Backdrop
 @onready var city_name: Label = $Shade/Margin/Layout/Main/CityPanel/CityName
@@ -38,6 +43,9 @@ var pending_sell_id := ""
 
 
 func _ready() -> void:
+	_apply_racing_theme()
+	car_preview.texture = _player_preview()
+	resized.connect(queue_redraw)
 	$Shade/Margin/Layout/Main/CityPanel/Carousel/Previous.pressed.connect(func(): _change_level(-1))
 	$Shade/Margin/Layout/Main/CityPanel/Carousel/Next.pressed.connect(func(): _change_level(1))
 	$Shade/Margin/Layout/Main/GaragePanel/Actions/Shop.pressed.connect(_open_shop)
@@ -45,6 +53,23 @@ func _ready() -> void:
 	$ShopOverlay/Shade/Panel/Layout/Actions/Refresh.pressed.connect(func(): shop_refresh_requested.emit())
 	$ShopOverlay/Shade/Panel/Layout/Actions/Sell.pressed.connect(_request_sell)
 	$ShopOverlay/Shade/Panel/Layout/Actions/Close.pressed.connect(func(): shop_overlay.visible = false)
+	queue_redraw()
+
+
+func _draw() -> void:
+	var city_panel: Control = $Shade/Margin/Layout/Main/CityPanel
+	var garage_panel: Control = $Shade/Margin/Layout/Main/GaragePanel
+	var city_rect := Rect2(to_local(city_panel.global_position) - Vector2(10, 9), city_panel.size + Vector2(20, 18))
+	var garage_rect := Rect2(to_local(garage_panel.global_position) - Vector2(10, 9), garage_panel.size + Vector2(20, 18))
+	draw_style_box(_panel_style(Color(PANEL, 0.90), Color("36506a"), 1, 5), city_rect)
+	draw_style_box(_panel_style(Color(PANEL, 0.94), CYAN, 2, 5), garage_rect)
+	var slash_x := garage_rect.position.x + garage_rect.size.x - 62.0
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(slash_x, garage_rect.position.y),
+		Vector2(slash_x + 26.0, garage_rect.position.y),
+		Vector2(slash_x + 62.0, garage_rect.position.y + 5.0),
+		Vector2(slash_x + 36.0, garage_rect.position.y + 5.0),
+	]), YELLOW)
 
 
 func configure(unlocked: int, gold: int, part_ids: Array[String] = [], offer_ids: Array[String] = [], shop_refresh_count: int = 0) -> void:
@@ -76,6 +101,7 @@ func _rebuild_loadout() -> void:
 	for slot in range(PartCatalog.MAX_OWNED):
 		var panel := Button.new()
 		panel.custom_minimum_size = Vector2(72, 64)
+		_style_button(panel, false, true)
 		if slot < owned_parts.size():
 			var part := PartCatalog.get_part(owned_parts[slot])
 			panel.icon = PartCatalog.icon(part)
@@ -99,35 +125,41 @@ func _rebuild_shop() -> void:
 	refresh_button.disabled = wallet_gold < PartCatalog.refresh_cost(refresh_count)
 	for part_id in shop_offers:
 		var part := PartCatalog.get_part(part_id)
-		var card := VBoxContainer.new()
+		var card := PanelContainer.new()
 		card.custom_minimum_size = Vector2(215, 250)
+		card.add_theme_stylebox_override("panel", _panel_style(Color("111d2d"), RARITY_COLORS[part["rarity"]], 2, 10))
+		var card_layout := VBoxContainer.new()
+		card_layout.add_theme_constant_override("separation", 6)
+		card.add_child(card_layout)
 		var rarity := Label.new()
-		rarity.text = part["rarity"]
+		rarity.text = "//  %s SPEC" % part["rarity"]
 		rarity.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		rarity.add_theme_color_override("font_color", RARITY_COLORS[part["rarity"]])
-		card.add_child(rarity)
+		card_layout.add_child(rarity)
 		var icon := TextureRect.new()
 		icon.custom_minimum_size = Vector2(180, 126)
 		icon.texture = PartCatalog.icon(part)
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		card.add_child(icon)
+		card_layout.add_child(icon)
 		var title := Label.new()
 		title.text = part["name"].to_upper()
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		title.add_theme_font_size_override("font_size", 20)
-		card.add_child(title)
+		card_layout.add_child(title)
 		var description := Label.new()
 		description.text = part["description"]
 		description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		description.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		description.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		card.add_child(description)
+		description.add_theme_color_override("font_color", Color("b8c7d9"))
+		card_layout.add_child(description)
 		var buy := Button.new()
 		buy.text = "BUY  •  %d GOLD" % part["price"]
 		buy.disabled = wallet_gold < int(part["price"]) or owned_parts.size() >= PartCatalog.MAX_OWNED
 		buy.pressed.connect(func(): part_purchase_requested.emit(part_id))
-		card.add_child(buy)
+		_style_button(buy, true)
+		card_layout.add_child(buy)
 		offers.add_child(card)
 	if shop_offers.is_empty():
 		var empty := Label.new()
@@ -147,6 +179,7 @@ func _rebuild_active_parts() -> void:
 	for slot in range(PartCatalog.MAX_OWNED):
 		var button := Button.new()
 		button.custom_minimum_size = Vector2(72, 64)
+		_style_button(button, false, true)
 		if slot < owned_parts.size():
 			var part_id := owned_parts[slot]
 			var part := PartCatalog.get_part(part_id)
@@ -154,6 +187,8 @@ func _rebuild_active_parts() -> void:
 			button.expand_icon = true
 			button.tooltip_text = "%s — %s" % [part["name"], part["description"]]
 			button.modulate = Color("47e7ff") if part_id == selected_part else Color.WHITE
+			if part_id == selected_part:
+				button.add_theme_stylebox_override("normal", _panel_style(Color("12344a"), CYAN, 3, 6))
 			button.pressed.connect(func(): _show_active_part(part_id, true))
 		else:
 			button.text = "+"
@@ -231,6 +266,67 @@ func _condition_text(name: String) -> String:
 		"Tokyo": return "HEAVY NIGHT RAIN  •  ELITE"
 		"Impossible": return "COSMIC HAZE  •  EXTREME"
 		_: return "CLEAR ROAD  •  %s" % ("CHALLENGING" if selected_level > 5 else "OPEN")
+
+
+func _apply_racing_theme() -> void:
+	var city_panel := $Shade/Margin/Layout/Main/CityPanel
+	var garage_panel := $Shade/Margin/Layout/Main/GaragePanel
+	city_panel.add_theme_constant_override("separation", 7)
+	garage_panel.add_theme_constant_override("separation", 8)
+	$ShopOverlay/Shade/Panel.add_theme_stylebox_override("panel", _panel_style(Color("080f19"), CYAN, 2, 4))
+	for button in [
+		$Shade/Margin/Layout/Main/CityPanel/Carousel/Previous,
+		$Shade/Margin/Layout/Main/CityPanel/Carousel/Next,
+		$Shade/Margin/Layout/Main/GaragePanel/Actions/Shop,
+		$ShopOverlay/Shade/Panel/Layout/Actions/Refresh,
+		$ShopOverlay/Shade/Panel/Layout/Actions/Sell,
+		$ShopOverlay/Shade/Panel/Layout/Actions/Close,
+	]:
+		_style_button(button)
+	_style_button($Shade/Margin/Layout/Main/GaragePanel/Actions/Start, true)
+	$Shade/Margin/Layout/TopBar/Title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
+	$Shade/Margin/Layout/TopBar/Title.add_theme_constant_override("shadow_offset_x", 3)
+	$Shade/Margin/Layout/TopBar/Title.add_theme_constant_override("shadow_offset_y", 3)
+
+
+func _style_button(button: Button, accent: bool = false, compact: bool = false) -> void:
+	var line := YELLOW if accent else CYAN
+	var normal_bg := Color("162332") if not accent else Color("e8b51f")
+	var hover_bg := PANEL_HOVER if not accent else Color("ffd447")
+	button.add_theme_stylebox_override("normal", _panel_style(normal_bg, line, 2, 5))
+	button.add_theme_stylebox_override("hover", _panel_style(hover_bg, line, 3, 5))
+	button.add_theme_stylebox_override("pressed", _panel_style(Color("0c1723"), Color.WHITE, 3, 5))
+	button.add_theme_stylebox_override("disabled", _panel_style(Color("0b121c"), Color("344354"), 1, 5))
+	button.add_theme_color_override("font_color", INK if accent else Color("e8f3ff"))
+	button.add_theme_color_override("font_hover_color", INK if accent else Color.WHITE)
+	button.add_theme_color_override("font_pressed_color", Color.WHITE)
+	button.add_theme_color_override("font_disabled_color", Color("536477"))
+	button.add_theme_font_size_override("font_size", 13 if compact else 16)
+
+
+func _panel_style(background: Color, border: Color, width: int, radius: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = background
+	style.border_color = border
+	style.set_border_width_all(width)
+	style.corner_radius_top_left = radius
+	style.corner_radius_top_right = radius
+	style.corner_radius_bottom_left = radius
+	style.corner_radius_bottom_right = radius
+	style.content_margin_left = 10
+	style.content_margin_right = 10
+	style.content_margin_top = 8
+	style.content_margin_bottom = 8
+	return style
+
+
+func _player_preview() -> AtlasTexture:
+	var sheet: Texture2D = load("res://assets/vehicles/player-gray-angle-sheet.png")
+	var preview := AtlasTexture.new()
+	preview.atlas = sheet
+	var frame_width := sheet.get_width() / 5.0
+	preview.region = Rect2(frame_width * 2.0, 0, frame_width, sheet.get_height())
+	return preview
 
 
 func _clear(container: Node) -> void:
