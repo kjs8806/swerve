@@ -132,9 +132,9 @@ func _rebuild_shop() -> void:
 	for part_id in shop_offers:
 		var part := PartCatalog.get_part(part_id)
 		var card := PanelContainer.new()
-		card.custom_minimum_size = Vector2(215, 250)
+		card.custom_minimum_size = Vector2(215, 270)
 		card.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		card.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		card.size_flags_vertical = Control.SIZE_FILL
 		card.add_theme_stylebox_override("panel", _panel_style(Color("111d2d"), RARITY_COLORS[part["rarity"]], 2, 10))
 		var card_layout := VBoxContainer.new()
 		card_layout.add_theme_constant_override("separation", 6)
@@ -145,17 +145,21 @@ func _rebuild_shop() -> void:
 		rarity.add_theme_color_override("font_color", RARITY_COLORS[part["rarity"]])
 		card_layout.add_child(rarity)
 		var icon := TextureRect.new()
-		icon.custom_minimum_size = Vector2(180, 126)
+		icon.custom_minimum_size = Vector2(180, 86)
 		icon.texture = PartCatalog.icon(part)
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		card_layout.add_child(icon)
 		var title := Label.new()
+		title.custom_minimum_size = Vector2(0, 38)
 		title.text = part["name"].to_upper()
+		title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		title.add_theme_font_size_override("font_size", 20)
+		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		title.add_theme_font_size_override("font_size", 17)
 		card_layout.add_child(title)
 		var description := Label.new()
+		description.custom_minimum_size = Vector2(0, 42)
 		description.text = part["description"]
 		description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		description.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -163,7 +167,7 @@ func _rebuild_shop() -> void:
 		description.add_theme_color_override("font_color", Color("b8c7d9"))
 		card_layout.add_child(description)
 		var buy := Button.new()
-		buy.custom_minimum_size = Vector2(175, 44)
+		buy.custom_minimum_size = Vector2(175, 38)
 		buy.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		buy.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		buy.text = "BUY  •  %d GOLD" % part["price"]

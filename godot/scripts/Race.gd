@@ -996,6 +996,8 @@ func _update_game(dt: float) -> void:
 		if active_level.advances_progression:
 			highest_unlocked_level = maxi(highest_unlocked_level, mini(active_level_index + 1, LevelCatalog.MAIN_LEVEL_COUNT - 1))
 			lobby_level_index = mini(active_level_index + 1, LevelCatalog.MAIN_LEVEL_COUNT - 1)
+		shop_refresh_count = 0
+		_roll_shop()
 		_save_progress()
 		win_flash = 0.5
 		_deactivate_turbo()
@@ -1141,6 +1143,9 @@ func _draw_rain_overlay(size: Vector2) -> void:
 	var wiped := _has_part("stormcut_wipers")
 	var drop_count := 34 if wiped else (92 if heavy else 68)
 	var intensity := 0.34 if wiped else (1.0 if heavy else 0.78)
+	if _has_part("nightvision_visor"):
+		drop_count = int(drop_count * 0.65)
+		intensity *= 0.5
 	var wind := size.x * 0.075
 	var rain_color := Color(0.78, 0.88, 0.96)
 
@@ -1187,6 +1192,8 @@ func _draw_vgrad(rect: Rect2, c_top: Color, c_bottom: Color, steps: int = 16) ->
 
 func _draw_fog() -> void:
 	var density: float = active_level.fog_density
+	if _has_part("nightvision_visor"):
+		density *= 0.5
 	if density <= 0.0:
 		return
 	var h := get_h()

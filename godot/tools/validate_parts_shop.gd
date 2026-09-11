@@ -4,7 +4,7 @@ var failures: Array[String] = []
 
 
 func _initialize() -> void:
-	_expect(PartCatalog.PARTS.size() == 14, "Expected fourteen parts")
+	_expect(PartCatalog.PARTS.size() == 15, "Expected fifteen parts")
 	var ids: Array[String] = []
 	for part in PartCatalog.PARTS:
 		_expect(not ids.has(part["id"]), "Duplicate part ID: %s" % part["id"])
@@ -21,7 +21,7 @@ func _initialize() -> void:
 	for part_id in next_offers:
 		_expect(part_id not in offers, "Refresh repeated an already shown item")
 	var almost_all := ids.duplicate()
-	almost_all.resize(13)
+	almost_all.resize(14)
 	_expect(PartCatalog.roll_offers(almost_all, 99).size() == 1, "Owned parts were not excluded")
 	_expect(float(PartCatalog.get_part("turbo_dynamo")["description"].find("35%")) >= 0, "Turbo Dynamo must extend duration by 35%")
 	await _validate_transactions()
@@ -49,11 +49,15 @@ func _validate_transactions() -> void:
 	await process_frame
 	_expect(race.total_gold == 0, "Fresh save must start with zero gold")
 	_expect(race.owned_part_ids.is_empty(), "Fresh save must start without parts")
+	var offers_before_win: Array[String] = race.shop_offer_ids.duplicate()
+	race.shop_refresh_count = 2
 	race.active_level_index = 0
 	race.active_level = LevelCatalog.get_level(0)
 	race.distance = race.active_level.finish_distance
 	race._update_game(0.0)
 	_expect(race.lobby_level_index == 1, "Winning level 1 did not make level 2 the lobby default")
+	_expect(race.shop_offer_ids != offers_before_win, "Winning a level did not refresh the shop")
+	_expect(race.shop_refresh_count == 0, "Free victory refresh did not reset refresh pricing")
 
 	var test_part: Dictionary = PartCatalog.PARTS[0]
 	var test_id := str(test_part["id"])

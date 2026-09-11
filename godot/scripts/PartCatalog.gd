@@ -22,6 +22,7 @@ const PARTS := [
 	{"id":"quickshift_transmission", "name":"Quickshift Transmission", "price":105, "rarity":"TUNED", "ability":"quickshift", "description":"Every 5 clean lane changes grants a short speed boost.", "icon_path":"res://assets/hud/parts/quickshift-transmission.png"},
 	{"id":"golden_alternator", "name":"Golden Alternator", "price":95, "rarity":"TUNED", "ability":"golden_alternator", "description":"Every 10th collected coin awards 1 bonus gold.", "icon_path":"res://assets/hud/parts/golden-alternator.png"},
 	{"id":"savings_coil", "name":"Savings Coil", "price":75, "rarity":"STANDARD", "ability":"savings_coil", "description":"Reduces every shop refresh cost by 1 gold.", "icon_path":"res://assets/hud/parts/savings-coil.png"},
+	{"id":"nightvision_visor", "name":"NightVision Visor", "price":110, "rarity":"TUNED", "ability":"nightvision", "description":"Cuts fog and rain obstruction in half.", "icon_path":"res://assets/hud/parts/nightvision-visor.png"},
 ]
 
 

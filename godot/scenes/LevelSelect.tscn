@@ -74,11 +74,6 @@ layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 14
 
-[node name="AccentRail" type="ColorRect" parent="Shade/Margin/Layout"]
-custom_minimum_size = Vector2(0, 3)
-layout_mode = 2
-color = Color(0.125, 0.851, 1, 1)
-
 [node name="CityPanel" type="VBoxContainer" parent="Shade/Margin/Layout/Main"]
 custom_minimum_size = Vector2(520, 0)
 layout_mode = 2
@@ -262,8 +257,9 @@ theme_override_colors/font_color = Color(1, 0.82, 0.25, 1)
 text = "0 GOLD"
 
 [node name="Offers" type="HBoxContainer" parent="ShopOverlay/Shade/Panel/Layout"]
+custom_minimum_size = Vector2(0, 270)
 layout_mode = 2
-size_flags_vertical = 3
+size_flags_vertical = 4
 theme_override_constants/separation = 18
 alignment = 1
 
