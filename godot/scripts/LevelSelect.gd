@@ -81,7 +81,7 @@ func configure(unlocked: int, gold: int, part_ids: Array[String] = [], offer_ids
 	owned_parts = part_ids.duplicate()
 	shop_offers = offer_ids.duplicate()
 	refresh_count = shop_refresh_count
-	gold_label.text = "◆  %d GOLD" % wallet_gold
+	gold_label.text = "%d GOLD" % wallet_gold
 	_rebuild_lobby()
 	_rebuild_shop()
 
@@ -124,7 +124,7 @@ func _rebuild_loadout() -> void:
 
 func _rebuild_shop() -> void:
 	_clear(offers)
-	shop_gold.text = "◆  %d GOLD" % wallet_gold
+	shop_gold.text = "%d GOLD" % wallet_gold
 	capacity.text = "PARTS  %d/%d" % [owned_parts.size(), PartCatalog.MAX_OWNED]
 	refresh_button.text = "REFRESH  •  %d GOLD" % PartCatalog.refresh_cost(refresh_count)
 	refresh_button.disabled = wallet_gold < PartCatalog.refresh_cost(refresh_count)
@@ -132,6 +132,8 @@ func _rebuild_shop() -> void:
 		var part := PartCatalog.get_part(part_id)
 		var card := PanelContainer.new()
 		card.custom_minimum_size = Vector2(215, 250)
+		card.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		card.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		card.add_theme_stylebox_override("panel", _panel_style(Color("111d2d"), RARITY_COLORS[part["rarity"]], 2, 10))
 		var card_layout := VBoxContainer.new()
 		card_layout.add_theme_constant_override("separation", 6)
