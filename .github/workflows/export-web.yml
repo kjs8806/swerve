@@ -6,12 +6,12 @@ name: Export Web (GitHub Pages)
 # does not (and cannot) change that setting itself.
 #
 # Manual run: use the "Run workflow" button on the Actions tab.
-# Automatic run: pushing to the branch below, or pushing a tag like "v1.0.0".
+# Automatic run: pushing to any branch, or pushing a tag like "v1.0.0".
 on:
   workflow_dispatch:
   push:
     branches:
-      - "claude/mobile-game-design-7pzuyq"
+      - "**"
     tags:
       - "v*"
 
