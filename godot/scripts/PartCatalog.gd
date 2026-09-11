@@ -15,13 +15,13 @@ const PARTS := [
 	{"id":"stormcut_wipers", "name":"StormCut Wipers", "price":70, "rarity":"STANDARD", "ability":"wipers", "description":"Clears most rain from the driver's view.", "atlas":4},
 	{"id":"rallycore_suspension", "name":"RallyCore Suspension", "price":100, "rarity":"TUNED", "ability":"suspension", "description":"Reduces collision slowdown and recovery by 40%.", "atlas":5},
 	{"id":"turbo_dynamo", "name":"Turbo Dynamo", "price":130, "rarity":"PROTOTYPE", "ability":"turbo_duration", "description":"Extends every turbo activation by 35%.", "atlas":6},
-	{"id":"turbo_vacuum", "name":"Turbo Vacuum", "price":150, "rarity":"PROTOTYPE", "ability":"turbo_vacuum", "description":"Collects coins from every lane while turbo is active.", "atlas":0},
-	{"id":"momentum_crown", "name":"Momentum Crown", "price":170, "rarity":"PROTOTYPE", "ability":"momentum_crown", "description":"Coins are worth 3 gold at a 10x combo or higher.", "atlas":1},
-	{"id":"nitro_capacitor", "name":"Nitro Capacitor", "price":125, "rarity":"TUNED", "ability":"nitro_capacitor", "description":"Coins collected during turbo extend it by 0.25 seconds.", "atlas":6},
-	{"id":"phantom_differential", "name":"Phantom Differential", "price":145, "rarity":"PROTOTYPE", "ability":"phantom_differential", "description":"Ignores the first collision in each race.", "atlas":5},
-	{"id":"quickshift_transmission", "name":"Quickshift Transmission", "price":105, "rarity":"TUNED", "ability":"quickshift", "description":"Every 5 clean lane changes grants a short speed boost.", "atlas":3},
-	{"id":"golden_alternator", "name":"Golden Alternator", "price":95, "rarity":"TUNED", "ability":"golden_alternator", "description":"Every 10th collected coin awards 1 bonus gold.", "atlas":1},
-	{"id":"savings_coil", "name":"Savings Coil", "price":75, "rarity":"STANDARD", "ability":"savings_coil", "description":"Reduces every shop refresh cost by 1 gold.", "atlas":7},
+	{"id":"turbo_vacuum", "name":"Turbo Vacuum", "price":150, "rarity":"PROTOTYPE", "ability":"turbo_vacuum", "description":"Collects coins from every lane while turbo is active.", "icon_path":"res://assets/hud/parts/turbo-vacuum.png"},
+	{"id":"momentum_crown", "name":"Momentum Crown", "price":170, "rarity":"PROTOTYPE", "ability":"momentum_crown", "description":"Coins are worth 3 gold at a 10x combo or higher.", "icon_path":"res://assets/hud/parts/momentum-crown.png"},
+	{"id":"nitro_capacitor", "name":"Nitro Capacitor", "price":125, "rarity":"TUNED", "ability":"nitro_capacitor", "description":"Coins collected during turbo extend it by 0.25 seconds.", "icon_path":"res://assets/hud/parts/nitro-capacitor.png"},
+	{"id":"phantom_differential", "name":"Phantom Differential", "price":145, "rarity":"PROTOTYPE", "ability":"phantom_differential", "description":"Ignores the first collision in each race.", "icon_path":"res://assets/hud/parts/phantom-differential.png"},
+	{"id":"quickshift_transmission", "name":"Quickshift Transmission", "price":105, "rarity":"TUNED", "ability":"quickshift", "description":"Every 5 clean lane changes grants a short speed boost.", "icon_path":"res://assets/hud/parts/quickshift-transmission.png"},
+	{"id":"golden_alternator", "name":"Golden Alternator", "price":95, "rarity":"TUNED", "ability":"golden_alternator", "description":"Every 10th collected coin awards 1 bonus gold.", "icon_path":"res://assets/hud/parts/golden-alternator.png"},
+	{"id":"savings_coil", "name":"Savings Coil", "price":75, "rarity":"STANDARD", "ability":"savings_coil", "description":"Reduces every shop refresh cost by 1 gold.", "icon_path":"res://assets/hud/parts/savings-coil.png"},
 ]
 
 
@@ -36,7 +36,9 @@ static func has_part(part_id: String) -> bool:
 	return not get_part(part_id).is_empty()
 
 
-static func icon(part: Dictionary) -> AtlasTexture:
+static func icon(part: Dictionary) -> Texture2D:
+	if part.has("icon_path"):
+		return load(str(part["icon_path"])) as Texture2D
 	var texture := AtlasTexture.new()
 	texture.atlas = ATLAS
 	var cell := Vector2(ATLAS.get_width() / 4.0, ATLAS.get_height() / 2.0)
