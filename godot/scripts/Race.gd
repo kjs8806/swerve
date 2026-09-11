@@ -64,7 +64,7 @@ const COIN_PUNCH_SCALE := 1.35
 const COIN_PICKUP_FX_DURATION := 0.3
 const COIN_SPARK_COLOR := Color(1.0, 0.85, 0.3)
 const COIN_LOSS_FX_DURATION := 0.75
-const HAZARD_COIN_LOSS := 2
+const HAZARD_COIN_LOSS := 1
 const TRAFFIC_COIN_LOSS := 3
 
 # Near-miss feedback: same expanding-spark mechanic as a coin pickup (see
@@ -624,7 +624,8 @@ func _lose_coins(requested_amount: int, impact_pos: Vector2, impact_scale: float
 	coin_loss_punch_t = COIN_PUNCH_DURATION
 	for i in range(lost):
 		coin_loss_fx.append({"pos": impact_pos, "scale": impact_scale, "index": i, "t": COIN_LOSS_FX_DURATION, "duration": COIN_LOSS_FX_DURATION})
-	popup_combo("-%d COINS" % lost, Color(1.0, 0.42, 0.22))
+	var coin_word := "COIN" if lost == 1 else "COINS"
+	popup_combo("-%d %s" % [lost, coin_word], Color(1.0, 0.42, 0.22))
 	return lost
 
 
