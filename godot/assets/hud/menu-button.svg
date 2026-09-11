@@ -1,8 +1,18 @@
 <svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#123c69"/><stop offset="1" stop-color="#07172f"/></linearGradient>
-    <linearGradient id="line" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#37e6ff"/><stop offset="1" stop-color="#6d8cff"/></linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#123c69"/>
+      <stop offset="1" stop-color="#07172f"/>
+    </linearGradient>
+    <linearGradient id="line" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#37e6ff"/>
+      <stop offset="1" stop-color="#6d8cff"/>
+    </linearGradient>
   </defs>
   <rect x="8" y="8" width="112" height="112" rx="25" fill="url(#panel)" stroke="#43dff8" stroke-width="6"/>
-  <g fill="url(#line)"><rect x="31" y="35" width="66" height="10" rx="5"/><rect x="31" y="59" width="66" height="10" rx="5"/><rect x="31" y="83" width="66" height="10" rx="5"/></g>
+  <g fill="url(#line)">
+    <rect x="31" y="35" width="66" height="10" rx="5"/>
+    <rect x="31" y="59" width="66" height="10" rx="5"/>
+    <rect x="31" y="83" width="66" height="10" rx="5"/>
+  </g>
 </svg>

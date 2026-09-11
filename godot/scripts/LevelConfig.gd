@@ -32,10 +32,6 @@ class_name LevelConfig
 @export var turbo_spawn_max: float = 11.0
 
 @export_group("Atmosphere")
-# A screen-space fog band anchored at the horizon, shortening how far ahead
-# the player can actually see rather than changing spawn timing/difficulty
-# numbers - the challenge is purely "you can't see it coming until it's
-# closer," not a harder obstacle pattern underneath. 0 disables it.
 @export_range(0.0, 1.0) var fog_density: float = 0.0
 @export var fog_color: Color = Color(0.55, 0.58, 0.66)
 

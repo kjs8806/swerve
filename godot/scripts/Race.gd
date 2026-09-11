@@ -113,12 +113,6 @@ const HAZARD_TEXTURES := [
 	preload("res://assets/obstacles/traffic-cone-hd.png"),
 ]
 const TEX_MENU_ICON := preload("res://assets/hud/menu-button.svg")
-
-# Fog is a screen-space band anchored at the horizon (y=0), so it reads as
-# distance haze regardless of any single object's p - at fog_density=1.0 it
-# reaches FOG_MAX_COVERAGE of the viewport height plus a soft FOG_FEATHER
-# fade-out, staying well above the player's own row (0.8 * height) so the
-# player is never fogged, only what's still further up the road.
 const FOG_MAX_COVERAGE := 0.66
 const FOG_FEATHER := 0.10
 const FOG_MAX_ALPHA := 0.98
@@ -171,6 +165,12 @@ var active_level: LevelConfig = LevelCatalog.get_level(0)
 var background_texture: Texture2D
 var highest_unlocked_level: int = 0
 var total_gold: int = 0
+var lobby_level_index: int = 0
+var race_gold_banked: bool = false
+var owned_part_ids: Array[String] = []
+var shop_offer_ids: Array[String] = []
+var shop_refresh_count: int = 0
+var shop_seed: int = 73421
 var level_select: Control
 
 # ---------- HUD refs ----------
@@ -230,19 +230,49 @@ func _load_progress() -> void:
 	if save.load("user://progress.cfg") == OK:
 		highest_unlocked_level = clampi(int(save.get_value("progress", "highest_unlocked", 0)), 0, LevelCatalog.MAIN_LEVEL_COUNT - 1)
 		total_gold = maxi(0, int(save.get_value("economy", "total_gold", 0)))
+		owned_part_ids = _valid_part_ids(save.get_value("garage", "owned_part_ids", PackedStringArray()))
+		shop_offer_ids = _valid_part_ids(save.get_value("shop", "offer_ids", PackedStringArray()))
+		shop_refresh_count = maxi(0, int(save.get_value("shop", "refresh_count", 0)))
+		shop_seed = int(save.get_value("shop", "seed", 73421))
+	lobby_level_index = highest_unlocked_level
+	if shop_offer_ids.is_empty():
+		_roll_shop()
 
 
 func _save_progress() -> void:
 	var save := ConfigFile.new()
-	# Preserve future economy fields such as owned/equipped car IDs.
 	save.load("user://progress.cfg")
 	save.set_value("progress", "highest_unlocked", highest_unlocked_level)
 	save.set_value("economy", "total_gold", total_gold)
+	save.set_value("garage", "owned_part_ids", PackedStringArray(owned_part_ids))
+	save.set_value("shop", "offer_ids", PackedStringArray(shop_offer_ids))
+	save.set_value("shop", "refresh_count", shop_refresh_count)
+	save.set_value("shop", "seed", shop_seed)
 	save.save("user://progress.cfg")
+
+
+func _valid_part_ids(value: Variant) -> Array[String]:
+	var result: Array[String] = []
+	if value is Array or value is PackedStringArray:
+		for raw_id in value:
+			var part_id := str(raw_id)
+			if PartCatalog.has_part(part_id) and part_id not in result and result.size() < PartCatalog.MAX_OWNED:
+				result.append(part_id)
+	return result
+
+
+func _roll_shop() -> void:
+	shop_offer_ids = PartCatalog.roll_offers(owned_part_ids, shop_seed, total_gold)
+	shop_seed += 7919
+
+
+func _configure_level_select() -> void:
+	level_select.configure(highest_unlocked_level, total_gold, owned_part_ids, shop_offer_ids, shop_refresh_count)
 
 
 func _show_level_select() -> void:
 	state = State.READY
+	_save_progress()
 	overlay.visible = false
 	menu_actions.visible = false
 	pause_button.visible = false
@@ -250,8 +280,58 @@ func _show_level_select() -> void:
 		level_select = LEVEL_SELECT_SCENE.instantiate()
 		$HUD.add_child(level_select)
 		level_select.level_selected.connect(_start_level)
-	level_select.configure(highest_unlocked_level, total_gold)
+		level_select.part_purchase_requested.connect(_on_part_purchase_requested)
+		level_select.part_sell_requested.connect(_on_part_sell_requested)
+		level_select.shop_refresh_requested.connect(_on_shop_refresh_requested)
+	_configure_level_select()
+	level_select.focus_level(lobby_level_index)
 	level_select.visible = true
+
+
+func _on_part_purchase_requested(part_id: String) -> void:
+	var part := PartCatalog.get_part(part_id)
+	if part.is_empty() or part_id not in shop_offer_ids or part_id in owned_part_ids:
+		level_select.show_shop_result("That offer is no longer available.", false)
+		return
+	if owned_part_ids.size() >= PartCatalog.MAX_OWNED:
+		level_select.show_shop_result("All five part slots are full.", false)
+		return
+	if total_gold < int(part["price"]):
+		level_select.show_shop_result("Not enough gold.", false)
+		return
+	total_gold -= int(part["price"])
+	owned_part_ids.append(part_id)
+	shop_offer_ids.erase(part_id)
+	_save_progress()
+	_configure_level_select()
+	level_select.keep_shop_open()
+	level_select.show_shop_result("%s installed." % part["name"], true)
+
+
+func _on_part_sell_requested(part_id: String) -> void:
+	if part_id not in owned_part_ids:
+		return
+	var part := PartCatalog.get_part(part_id)
+	total_gold += int(part["price"]) / 2
+	owned_part_ids.erase(part_id)
+	_save_progress()
+	_configure_level_select()
+	level_select.keep_shop_open()
+	level_select.show_shop_result("%s sold for %d gold." % [part["name"], int(part["price"]) / 2], true)
+
+
+func _on_shop_refresh_requested() -> void:
+	var cost := PartCatalog.refresh_cost(shop_refresh_count)
+	if total_gold < cost:
+		level_select.show_shop_result("Not enough gold to refresh.", false)
+		return
+	total_gold -= cost
+	shop_refresh_count += 1
+	_roll_shop()
+	_save_progress()
+	_configure_level_select()
+	level_select.keep_shop_open()
+	level_select.show_shop_result("Fresh parts just arrived.", true)
 
 
 func _start_level(level_index: int) -> void:
@@ -261,6 +341,7 @@ func _start_level(level_index: int) -> void:
 	if not selected_level.unlocked_by_default and level_index > highest_unlocked_level:
 		return
 	active_level_index = level_index
+	lobby_level_index = level_index
 	active_level = selected_level
 	background_texture = active_level.background_texture
 	level_select.visible = false
@@ -398,6 +479,9 @@ func reset_game(play_ui_tap: bool = false) -> void:
 	time = 0.0
 	distance = 0.0
 	race_gold = 0
+	race_gold_banked = false
+	shop_refresh_count = 0
+	_save_progress()
 	combo = 0
 	best_combo = 0
 	player_lane = int((LANES - 1) / 2)
@@ -462,19 +546,26 @@ func _resume_game() -> void:
 
 
 func base_speed() -> float:
-	return minf(active_level.base_speed_max, active_level.base_speed_start + active_level.base_speed_ramp * time)
+	var speed := minf(active_level.base_speed_max, active_level.base_speed_start + active_level.base_speed_ramp * time)
+	return speed * (1.07 if _has_part("redline_engine") else 1.0)
 
 
 func current_speed() -> float:
 	var mult := 1.0
 	if penalty_t > 0.0:
-		var tt: float = 1.0 - penalty_t / COLLISION_RECOVER_TIME
-		mult *= lerp(COLLISION_PENALTY_MULT, 1.0, clampf(tt, 0.0, 1.0))
+		var recover := COLLISION_RECOVER_TIME * (0.6 if _has_part("rallycore_suspension") else 1.0)
+		var penalty_mult := lerpf(COLLISION_PENALTY_MULT, 1.0, 0.4) if _has_part("rallycore_suspension") else COLLISION_PENALTY_MULT
+		var tt: float = 1.0 - penalty_t / recover
+		mult *= lerp(penalty_mult, 1.0, clampf(tt, 0.0, 1.0))
 	if boost_t > 0.0:
 		mult *= BOOST_MULT
 	if is_turbo:
 		mult *= TURBO_MULT
 	return base_speed() * mult
+
+
+func _has_part(part_id: String) -> bool:
+	return part_id in owned_part_ids
 
 
 func _spawn_spark(pos: Vector2, scale: float, duration: float, color: Color) -> void:
@@ -533,7 +624,7 @@ func try_swerve(dir: int) -> void:
 	var now := Time.get_ticks_msec()
 	if now < lane_change_lock_until:
 		return
-	lane_change_lock_until = now + 90
+	lane_change_lock_until = now + (75 if _has_part("vector_wheel") else 90)
 	var target: int = clampi(player_lane + dir, 0, LANES - 1)
 	if target == player_lane:
 		return
@@ -696,7 +787,8 @@ func _activate_timed_turbo() -> void:
 	turbo_gauge = TURBO_GAUGE_MAX
 	is_turbo = true
 	invincible = true
-	popup_combo("TURBO! %.1fs" % TURBO_DURATION, Color(1.0, 0.478, 0.102))
+	var duration := TURBO_DURATION * (1.35 if _has_part("turbo_dynamo") else 1.0)
+	popup_combo("TURBO! %.1fs" % duration, Color(1.0, 0.478, 0.102))
 	_audio_call(&"turbo_charged")
 	if not was_active:
 		turbo_ring_t = TURBO_RING_DURATION
@@ -727,7 +819,8 @@ func _update_game(dt: float) -> void:
 	time += dt
 
 	if lane_anim_t < 1.0:
-		lane_anim_t = clampf(lane_anim_t + dt / LANE_CHANGE_TIME, 0.0, 1.0)
+		var lane_time := LANE_CHANGE_TIME * (0.82 if _has_part("vector_wheel") else 1.0)
+		lane_anim_t = clampf(lane_anim_t + dt / lane_time, 0.0, 1.0)
 		player_lane_visual = lerp(lane_anim_from, float(player_lane), lane_anim_t)
 
 	if penalty_t > 0.0:
@@ -736,7 +829,8 @@ func _update_game(dt: float) -> void:
 		boost_t = maxf(0.0, boost_t - dt)
 
 	if is_turbo:
-		turbo_gauge = maxf(0.0, turbo_gauge - TURBO_DRAIN_PER_SEC * dt)
+		var drain := TURBO_DRAIN_PER_SEC / (1.35 if _has_part("turbo_dynamo") else 1.0)
+		turbo_gauge = maxf(0.0, turbo_gauge - drain * dt)
 		if turbo_gauge <= 0.0:
 			_deactivate_turbo()
 
@@ -761,7 +855,7 @@ func _update_game(dt: float) -> void:
 				o["resolved"] = true
 			else:
 				o["resolved"] = true
-				penalty_t = COLLISION_RECOVER_TIME
+				penalty_t = COLLISION_RECOVER_TIME * (0.6 if _has_part("rallycore_suspension") else 1.0)
 				boost_t = 0.0
 				combo = 0
 				hit_flash = 0.25
@@ -787,11 +881,13 @@ func _update_game(dt: float) -> void:
 		if c["collected"]:
 			continue
 		c["p"] += dp
-		if c["lane"] == player_lane and c["p"] >= COLLIDE_AT and c["p"] < COLLIDE_AT + 0.05:
+		if _has_part("flux_magnet") and absi(int(round(float(c["lane"]))) - player_lane) <= 1 and c["p"] >= 0.72:
+			c["lane"] = move_toward(float(c["lane"]), float(player_lane), dt * 4.0)
+		var lane_distance: int = absi(int(round(float(c["lane"]))) - player_lane)
+		var magnet_collect := _has_part("flux_magnet") and lane_distance <= 1
+		if (lane_distance == 0 or magnet_collect) and c["p"] >= COLLIDE_AT and c["p"] < COLLIDE_AT + 0.05:
 			c["collected"] = true
-			race_gold += 1
-			total_gold += 1
-			_save_progress()
+			race_gold += 2 if _has_part("golden_gearbox") else 1
 			coin_punch_t = COIN_PUNCH_DURATION
 			_spawn_spark(Vector2(lane_x(c["lane"], c["p"]), row_y(c["p"])), scale_at(c["p"]), COIN_PICKUP_FX_DURATION, COIN_SPARK_COLOR)
 			_audio_call(&"coin_collected")
@@ -821,7 +917,7 @@ func _update_game(dt: float) -> void:
 	coin_timer -= dt
 	if coin_timer <= 0.0:
 		_spawn_coins()
-		coin_timer = randf_range(active_level.coin_interval_min, active_level.coin_interval_max)
+		coin_timer = randf_range(active_level.coin_interval_min, active_level.coin_interval_max) * (0.82 if _has_part("coin_scanner") else 1.0)
 
 	turbo_spawn_timer -= dt
 	if turbo_spawn_timer <= 0.0:
@@ -863,8 +959,10 @@ func _update_game(dt: float) -> void:
 
 	if distance >= active_level.finish_distance:
 		state = State.WIN
+		_bank_race_gold()
 		if active_level.advances_progression:
 			highest_unlocked_level = maxi(highest_unlocked_level, mini(active_level_index + 1, LevelCatalog.MAIN_LEVEL_COUNT - 1))
+			lobby_level_index = mini(active_level_index + 1, LevelCatalog.MAIN_LEVEL_COUNT - 1)
 		_save_progress()
 		win_flash = 0.5
 		_deactivate_turbo()
@@ -873,6 +971,7 @@ func _update_game(dt: float) -> void:
 		_show_end_screen(true)
 	elif time >= active_level.race_time:
 		state = State.LOSE
+		_bank_race_gold()
 		_deactivate_turbo()
 		turbo_pickups.clear()
 		_audio_call(&"finish_race", [false])
@@ -894,6 +993,14 @@ func _show_end_screen(won: bool) -> void:
 	]
 
 
+func _bank_race_gold() -> void:
+	if race_gold_banked:
+		return
+	race_gold_banked = true
+	total_gold += race_gold
+	_save_progress()
+
+
 # ---------- HUD ----------
 func _update_hud() -> void:
 	var remaining: float = maxf(0.0, active_level.race_time - time)
@@ -901,7 +1008,7 @@ func _update_hud() -> void:
 		_audio_call(&"update_countdown", [remaining])
 	timer_label.text = "%.1f" % remaining
 	timer_label.modulate = Color8(0xff, 0x4d, 0x4d) if remaining < 10.0 else Color8(0xff, 0xcc, 0x33)
-	coin_label.text = "%d" % total_gold
+	coin_label.text = "%d" % (total_gold + (0 if race_gold_banked else race_gold))
 	coin_label.pivot_offset = coin_label.size * 0.5
 	var coin_punch_frac: float = coin_punch_t / COIN_PUNCH_DURATION
 	coin_label.scale = Vector2.ONE * (1.0 + (COIN_PUNCH_SCALE - 1.0) * coin_punch_frac)
@@ -945,7 +1052,7 @@ func _draw() -> void:
 	for c in coins_list:
 		if c["p"] < -0.1:
 			continue
-		draw_items.append({"p": c["p"], "cb": func(): _draw_coin(Vector2(lane_x(c["lane"], c["p"]), row_y(c["p"])), scale_at(c["p"]))})
+		draw_items.append({"p": c["p"], "cb": func(): _draw_scanned_coin(c)})
 	for pickup in turbo_pickups:
 		if pickup["p"] < -0.1:
 			continue
@@ -973,6 +1080,7 @@ func _draw() -> void:
 	draw_items.sort_custom(func(a, b): return a["p"] < b["p"])
 	for item in draw_items:
 		item["cb"].call()
+	_draw_fog()
 
 	_draw_fog()
 
@@ -995,6 +1103,27 @@ func _draw() -> void:
 		var pulse: float = 0.5 + 0.5 * sin(elapsed_t * 8.0)
 		draw_rect(Rect2(Vector2.ZERO, sz), Color(1.0, 0.549, 0.078, 0.08 + pulse * 0.05))
 		draw_texture_rect(vignette_tex, Rect2(Vector2.ZERO, sz), false, Color(1, 1, 1, 0.35 + pulse * 0.25))
+	_draw_rain_overlay(sz)
+
+
+func _draw_rain_overlay(size: Vector2) -> void:
+	var rainy := active_level.city_name in ["London", "Hong Kong", "Tokyo"]
+	if not rainy:
+		return
+	var alpha := 0.08 if _has_part("stormcut_wipers") else (0.26 if active_level.city_name == "Tokyo" else 0.19)
+	for i in range(42):
+		var seed := float(i * 97)
+		var x := fmod(seed * 13.7 + elapsed_t * 520.0, size.x + 100.0) - 50.0
+		var y := fmod(seed * 7.3 + elapsed_t * 760.0, size.y + 100.0) - 50.0
+		draw_line(Vector2(x, y), Vector2(x - 11.0, y + 28.0), Color(0.55, 0.83, 1.0, alpha), 2.0)
+
+
+func _draw_scanned_coin(coin: Dictionary) -> void:
+	var pos := Vector2(lane_x(coin["lane"], coin["p"]), row_y(coin["p"]))
+	var scale := scale_at(coin["p"])
+	if _has_part("coin_scanner") and coin["p"] < 0.72:
+		draw_circle(pos, 24.0 * scale, Color(0.1, 0.9, 1.0, 0.12), false, 2.0)
+	_draw_coin(pos, scale)
 
 
 func _draw_vgrad(rect: Rect2, c_top: Color, c_bottom: Color, steps: int = 16) -> void:

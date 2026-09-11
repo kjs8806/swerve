@@ -15,13 +15,18 @@ godot4 --path godot/
 grid, spawning, collision logic, and rendering. The ten-city campaign and the
 always-unlocked Impossible space bonus level use data-driven race profiles in
 `levels/` as `LevelConfig` resources, exposed by `scripts/LevelCatalog.gd`.
-`scenes/LevelSelect.tscn` presents the level grid.
+`scenes/LevelSelect.tscn` presents a racing-lobby city carousel, five-slot
+active-parts loadout, and rotating three-offer parts market. The player keeps
+the standard gray car while purchasable gameplay
+parts in `PartCatalog.gd` provide the run-changing abilities.
 
 Progression is sequential: completing level N unlocks level N+1. The highest
 unlocked level is stored in `user://progress.cfg`; deleting that file resets
-progress without affecting other settings. Gold pickups accumulate across
-levels in the same save file under `economy/total_gold`, ready to be spent by
-the future car-unlock system. Restarting a race resets only its per-run total.
+progress without affecting other settings. A fresh save starts with the
+standard gray car and zero gold. Gold collected during a race is added to the
+persistent wallet when the race ends. Part purchases, half-price sales, the
+five-part inventory, visible shop offers, and escalating refresh cost persist
+in the same file.
 
 `scenes/Main.tscn` holds the HUD and wires up the swerve/restart buttons.
 Approved production art is stored under `assets/` and is drawn on the existing
@@ -44,4 +49,11 @@ range. Validate object separation with:
 
 ```
 godot4 --headless --path godot --script res://tools/validate_obstacle_spacing.gd
+```
+
+Validate the parts catalog and rotating-shop invariants with
+an isolated user-data directory:
+
+```
+XDG_DATA_HOME=/tmp/swerve-test godot4 --headless --path godot --script res://tools/validate_parts_shop.gd
 ```

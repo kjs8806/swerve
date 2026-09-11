@@ -8,10 +8,12 @@ name: Export Android APK
 # up later.
 #
 # Manual run: use the "Run workflow" button on the Actions tab.
-# Automatic run: pushing a tag like "v1.0.0".
+# Automatic runs: every push outside the default branch, and version tags.
 on:
   workflow_dispatch:
   push:
+    branches-ignore:
+      - "main"
     tags:
       - "v*"
 
