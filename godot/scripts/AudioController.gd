@@ -51,6 +51,7 @@ var music_fade: Tween
 var turbo_fade: Tween
 var engine_mode := "stopped"
 var turbo_active := false
+var paused_music_position := 0.0
 var last_lane_sound_ms := -LANE_SOUND_COOLDOWN_MS
 var last_collision_sound_ms := -COLLISION_SOUND_COOLDOWN_MS
 var last_road_hit_sound_ms := -ROAD_HIT_SOUND_COOLDOWN_MS
@@ -132,16 +133,35 @@ func start_background_music() -> void:
 	var fade := _replace_music_fade()
 	if not background_music.playing:
 		background_music.volume_db = SILENT_DB
-		background_music.play()
+		background_music.play(paused_music_position)
+	paused_music_position = 0.0
 	fade.tween_property(background_music, "volume_db", MUSIC_PLAY_DB, MUSIC_FADE_IN_TIME)
 
 
 func stop_background_music() -> void:
+	paused_music_position = 0.0
 	if not background_music.playing:
 		return
 	var fade := _replace_music_fade()
 	fade.tween_property(background_music, "volume_db", SILENT_DB, MUSIC_FADE_OUT_TIME)
 	fade.tween_callback(func(): background_music.stop())
+
+
+func pause_background_music() -> void:
+	if not background_music.playing:
+		return
+	paused_music_position = background_music.get_playback_position()
+	if music_fade != null and music_fade.is_valid():
+		music_fade.kill()
+	background_music.stop()
+
+
+func stop_background_music_immediately() -> void:
+	paused_music_position = 0.0
+	if music_fade != null and music_fade.is_valid():
+		music_fade.kill()
+	background_music.stop()
+	background_music.volume_db = SILENT_DB
 
 
 func _set_music_turbo_duck(active: bool) -> void:
@@ -187,6 +207,7 @@ func stop_engine() -> void:
 
 func begin_race(play_ui_tap: bool) -> void:
 	_stop_one_shots()
+	paused_music_position = 0.0
 	set_turbo(false)
 	last_countdown_second = -1
 	last_lane_sound_ms = -LANE_SOUND_COOLDOWN_MS
@@ -197,6 +218,14 @@ func begin_race(play_ui_tap: bool) -> void:
 	_play("race_start")
 	start_background_music()
 	set_engine_driving()
+
+
+func pause_race() -> void:
+	pause_background_music()
+
+
+func resume_race() -> void:
+	start_background_music()
 
 
 func lane_changed() -> void:

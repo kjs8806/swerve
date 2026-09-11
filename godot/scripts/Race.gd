@@ -272,6 +272,7 @@ func _configure_level_select() -> void:
 
 func _show_level_select() -> void:
 	state = State.READY
+	_audio_call(&"stop_background_music_immediately")
 	_save_progress()
 	overlay.visible = false
 	menu_actions.visible = false
@@ -526,6 +527,7 @@ func _toggle_pause() -> void:
 
 func _open_pause_menu() -> void:
 	state = State.PAUSED
+	_audio_call(&"pause_race")
 	overlay.visible = true
 	pause_button.visible = false
 	overlay_title.text = "PAUSED"
@@ -539,6 +541,7 @@ func _resume_game() -> void:
 	if state != State.PAUSED:
 		return
 	state = State.PLAYING
+	_audio_call(&"resume_race")
 	overlay.visible = false
 	menu_actions.visible = false
 	overlay_button.visible = true
@@ -1110,12 +1113,38 @@ func _draw_rain_overlay(size: Vector2) -> void:
 	var rainy := active_level.city_name in ["London", "Hong Kong", "Tokyo"]
 	if not rainy:
 		return
-	var alpha := 0.08 if _has_part("stormcut_wipers") else (0.26 if active_level.city_name == "Tokyo" else 0.19)
-	for i in range(42):
-		var seed := float(i * 97)
-		var x := fmod(seed * 13.7 + elapsed_t * 520.0, size.x + 100.0) - 50.0
-		var y := fmod(seed * 7.3 + elapsed_t * 760.0, size.y + 100.0) - 50.0
-		draw_line(Vector2(x, y), Vector2(x - 11.0, y + 28.0), Color(0.55, 0.83, 1.0, alpha), 2.0)
+	var heavy := active_level.city_name == "Tokyo"
+	var wiped := _has_part("stormcut_wipers")
+	var drop_count := 34 if wiped else (92 if heavy else 68)
+	var intensity := 0.34 if wiped else (1.0 if heavy else 0.78)
+	var wind := size.x * 0.075
+	var rain_color := Color(0.78, 0.88, 0.96)
+
+	# Each streak gets stable pseudo-random depth and speed. Far rain is short,
+	# faint and slow while foreground drops are brighter and motion-blurred.
+	for i in range(drop_count):
+		var fi := float(i)
+		var depth := 0.18 + fmod(fi * 0.61803398875, 1.0) * 0.82
+		var x_seed := fmod(fi * 0.754877666, 1.0)
+		var y_seed := fmod(fi * 0.569840296, 1.0)
+		var fall_speed := lerpf(330.0, 1120.0, depth)
+		var streak_length := lerpf(7.0, 36.0, depth)
+		var travel_y := fmod(y_seed * (size.y + 120.0) + elapsed_t * fall_speed, size.y + 120.0) - 60.0
+		var travel_x := fmod(x_seed * (size.x + 160.0) + elapsed_t * wind * depth + travel_y * 0.055, size.x + 160.0) - 80.0
+		var alpha := lerpf(0.055, 0.30, depth) * intensity
+		var width := lerpf(0.55, 1.65, depth)
+		var end := Vector2(travel_x - streak_length * 0.20, travel_y + streak_length)
+		draw_line(Vector2(travel_x, travel_y), end, Color(rain_color, alpha), width, true)
+
+	# A few slow windshield beads add a close focal layer without obscuring play.
+	if not wiped:
+		var bead_count := 8 if heavy else 5
+		for i in range(bead_count):
+			var fi := float(i + 1)
+			var radius := 1.8 + fmod(fi * 2.37, 3.2)
+			var x := fmod(fi * 173.3, size.x * 0.86) + size.x * 0.07
+			var y := fmod(fi * 91.7 + elapsed_t * (8.0 + fi), size.y * 0.78) + size.y * 0.06
+			draw_circle(Vector2(x, y), radius, Color(0.82, 0.91, 1.0, 0.10 * intensity), false, 0.8, true)
 
 
 func _draw_scanned_coin(coin: Dictionary) -> void:
