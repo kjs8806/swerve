@@ -63,6 +63,9 @@ const COIN_PUNCH_DURATION := 0.18
 const COIN_PUNCH_SCALE := 1.35
 const COIN_PICKUP_FX_DURATION := 0.3
 const COIN_SPARK_COLOR := Color(1.0, 0.85, 0.3)
+const COIN_LOSS_FX_DURATION := 0.75
+const HAZARD_COIN_LOSS := 2
+const TRAFFIC_COIN_LOSS := 3
 
 # Near-miss feedback: same expanding-spark mechanic as a coin pickup (see
 # spark_fx below), positioned at the dodged obstacle, plus a light screen
@@ -145,8 +148,10 @@ var shake_t: float = 0.0
 var turbo_ring_t: float = 0.0
 var turbo_flash_t: float = 0.0
 var coin_punch_t: float = 0.0
+var coin_loss_punch_t: float = 0.0
 var near_miss_flash: float = 0.0
 var spark_fx: Array = [] # {pos, scale, t, duration, color} - coin pickups + near-misses
+var coin_loss_fx: Array = [] # {pos, scale, index, t, duration} - coins scattered by an impact
 var road_scroll: float = 0.0
 var obstacles: Array = []
 var coins_list: Array = []
@@ -527,8 +532,10 @@ func reset_game(play_ui_tap: bool = false) -> void:
 	turbo_ring_t = 0.0
 	turbo_flash_t = 0.0
 	coin_punch_t = 0.0
+	coin_loss_punch_t = 0.0
 	near_miss_flash = 0.0
 	spark_fx.clear()
+	coin_loss_fx.clear()
 	position = Vector2.ZERO
 	road_scroll = 0.0
 	obstacles.clear()
@@ -601,6 +608,24 @@ func _has_part(part_id: String) -> bool:
 
 func _spawn_spark(pos: Vector2, scale: float, duration: float, color: Color) -> void:
 	spark_fx.append({"pos": pos, "scale": scale, "t": duration, "duration": duration, "color": color})
+
+
+func _lose_coins(requested_amount: int, impact_pos: Vector2, impact_scale: float) -> int:
+	var lost := mini(requested_amount, total_gold + race_gold)
+	if lost <= 0:
+		popup_combo("NO COINS", Color(1.0, 0.42, 0.22))
+		return 0
+	var lost_from_race := mini(race_gold, lost)
+	race_gold -= lost_from_race
+	var lost_from_total := lost - lost_from_race
+	if lost_from_total > 0:
+		total_gold = maxi(0, total_gold - lost_from_total)
+		_save_progress()
+	coin_loss_punch_t = COIN_PUNCH_DURATION
+	for i in range(lost):
+		coin_loss_fx.append({"pos": impact_pos, "scale": impact_scale, "index": i, "t": COIN_LOSS_FX_DURATION, "duration": COIN_LOSS_FX_DURATION})
+	popup_combo("-%d COINS" % lost, Color(1.0, 0.42, 0.22))
+	return lost
 
 
 func popup_combo(text: String, color: Color) -> void:
@@ -888,6 +913,9 @@ func _update_game(dt: float) -> void:
 				popup_combo("PHASED!", Color(0.68, 0.42, 1.0))
 			else:
 				o["resolved"] = true
+				var impact_pos := Vector2(lane_x(o["lane"], o["p"]), row_y(o["p"]))
+				var requested_coin_loss := HAZARD_COIN_LOSS if o["kind"] == "hazard" else TRAFFIC_COIN_LOSS
+				_lose_coins(requested_coin_loss, impact_pos, scale_at(o["p"]))
 				penalty_t = COLLISION_RECOVER_TIME * (0.6 if _has_part("rallycore_suspension") else 1.0)
 				boost_t = 0.0
 				combo = 0
@@ -898,7 +926,6 @@ func _update_game(dt: float) -> void:
 				clean_lane_changes = 0
 				hit_flash = 0.25
 				shake_t = SHAKE_DURATION
-				popup_combo("HIT!", Color(1.0, 0.3, 0.3))
 				_audio_call(&"collision", [o["kind"] == "hazard"])
 		elif o["p"] >= PASS_AT:
 			o["resolved"] = true
@@ -977,11 +1004,16 @@ func _update_game(dt: float) -> void:
 		turbo_flash_t = maxf(0.0, turbo_flash_t - dt)
 	if coin_punch_t > 0.0:
 		coin_punch_t = maxf(0.0, coin_punch_t - dt)
+	if coin_loss_punch_t > 0.0:
+		coin_loss_punch_t = maxf(0.0, coin_loss_punch_t - dt)
 	if near_miss_flash > 0.0:
 		near_miss_flash = maxf(0.0, near_miss_flash - dt)
 	for fx in spark_fx:
 		fx["t"] -= dt
 	spark_fx = spark_fx.filter(func(fx): return fx["t"] > 0.0)
+	for fx in coin_loss_fx:
+		fx["t"] -= dt
+	coin_loss_fx = coin_loss_fx.filter(func(fx): return fx["t"] > 0.0)
 
 	# Camera shake only ever offsets this Node2D, never the HUD (a separate
 	# CanvasLayer, immune to its parent's 2D transform) - so it can never
@@ -1051,8 +1083,9 @@ func _update_hud() -> void:
 	timer_label.modulate = Color8(0xff, 0x4d, 0x4d) if remaining < 10.0 else Color8(0xff, 0xcc, 0x33)
 	coin_label.text = "%d" % (total_gold + (0 if race_gold_banked else race_gold))
 	coin_label.pivot_offset = coin_label.size * 0.5
-	var coin_punch_frac: float = coin_punch_t / COIN_PUNCH_DURATION
+	var coin_punch_frac: float = maxf(coin_punch_t, coin_loss_punch_t) / COIN_PUNCH_DURATION
 	coin_label.scale = Vector2.ONE * (1.0 + (COIN_PUNCH_SCALE - 1.0) * coin_punch_frac)
+	coin_label.modulate = Color(1.0, 0.32, 0.22) if coin_loss_punch_t > 0.0 else Color.WHITE
 	combo_panel.visible = combo > 0
 	combo_label.text = "%dx" % maxi(1, combo)
 
@@ -1123,6 +1156,8 @@ func _draw() -> void:
 
 	for fx in spark_fx:
 		_draw_spark_fx(fx)
+	for fx in coin_loss_fx:
+		_draw_coin_loss_fx(fx)
 
 	if turbo_ring_t > 0.0:
 		_draw_turbo_ring(px, py)
@@ -1503,6 +1538,16 @@ func _draw_spark_fx(fx: Dictionary) -> void:
 	var col: Color = fx["color"]
 	col.a = alpha * 0.9
 	draw_arc(fx["pos"], radius, 0.0, TAU, 20, col, 3.0 * fx["scale"], true)
+
+
+func _draw_coin_loss_fx(fx: Dictionary) -> void:
+	var progress: float = 1.0 - fx["t"] / fx["duration"]
+	var direction: float = -1.0 if int(fx["index"]) % 2 == 0 else 1.0
+	var spread: float = (34.0 + 12.0 * int(fx["index"])) * fx["scale"]
+	var offset := Vector2(direction * spread * progress, (-72.0 * progress + 64.0 * progress * progress) * fx["scale"])
+	var alpha: float = clampf(1.0 - progress, 0.0, 1.0)
+	var size := TEX_COIN.get_size() * (fx["scale"] * COIN_DRAW_SCALE * 0.78)
+	draw_texture_rect(TEX_COIN, Rect2(fx["pos"] + offset - size * 0.5, size), false, Color(1.0, 0.62, 0.48, alpha))
 
 
 func _draw_finish_tape(p: float) -> void:
