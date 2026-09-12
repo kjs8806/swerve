@@ -51,8 +51,8 @@ const OBSTACLE_OVERLAP_MARGIN := 5.0
 # they read clearly without ever covering a lane or disabling input.
 const SHAKE_DURATION := 0.22
 const SHAKE_MAGNITUDE := 9.0
-const TURBO_FLASH_DURATION := 0.28
-const TURBO_RING_DURATION := 0.5
+const TURBO_FLASH_DURATION := 0.42
+const TURBO_RING_DURATION := 0.72
 const SPEED_LINE_ALPHA := 0.55
 const SPEED_LINE_PULSE_SPEED := 3.0
 
@@ -1003,6 +1003,8 @@ func _activate_timed_turbo() -> void:
 	if not was_active:
 		turbo_ring_t = TURBO_RING_DURATION
 		turbo_flash_t = TURBO_FLASH_DURATION
+		turbo_visual = maxf(turbo_visual, 0.42)
+		shake_t = maxf(shake_t, SHAKE_DURATION * 0.8)
 		_audio_call(&"set_turbo", [true])
 
 
@@ -1398,6 +1400,7 @@ func _draw() -> void:
 		_draw_turbo_ring(px, py)
 	if turbo_flash_t > 0.0:
 		_draw_turbo_flash(px, py)
+		_draw_turbo_activation_pulse(get_viewport_rect().size, Vector2(px, py))
 
 	var sz := get_viewport_rect().size
 	if hit_flash > 0.0:
@@ -1984,27 +1987,47 @@ func _draw_flame_trail(pos: Vector2, scale: float, t: float, rotation: float = 0
 # Approved energy-ring sprite, scaled up and faded out over
 # TURBO_RING_DURATION - centered on the player so it reads as "bursting
 # outward from the car" rather than a generic screen-wide flash.
-const RING_TEX_MIN_SCALE := 0.2
-const RING_TEX_MAX_SCALE := 1.0
+const RING_TEX_MIN_SCALE := 0.24
+const RING_TEX_MAX_SCALE := 1.5
 
 func _draw_turbo_ring(px: float, py: float) -> void:
 	var t: float = 1.0 - turbo_ring_t / TURBO_RING_DURATION
 	var scale: float = lerp(RING_TEX_MIN_SCALE, RING_TEX_MAX_SCALE, 1.0 - pow(1.0 - t, 3.0))
 	var alpha: float = (1.0 - t) * (1.0 - t)
 	var size: Vector2 = TEX_TURBO_RING.get_size() * scale
-	draw_texture_rect(TEX_TURBO_RING, Rect2(Vector2(px, py) - size * 0.5, size), false, Color(1, 1, 1, alpha))
+	draw_texture_rect(TEX_TURBO_RING, Rect2(Vector2(px, py) - size * 0.5, size), false, Color(0.55, 0.9, 1.0, alpha))
+	# A delayed inner wave makes the ignition read as a forceful double pulse.
+	var delayed_t: float = clampf((t - 0.16) / 0.84, 0.0, 1.0)
+	var delayed_scale: float = lerpf(0.18, 1.05, 1.0 - pow(1.0 - delayed_t, 3.0))
+	var delayed_alpha: float = (1.0 - delayed_t) * 0.72 if t > 0.16 else 0.0
+	var delayed_size: Vector2 = TEX_TURBO_RING.get_size() * delayed_scale
+	draw_texture_rect(TEX_TURBO_RING, Rect2(Vector2(px, py) - delayed_size * 0.5, delayed_size), false, Color(0.85, 0.98, 1.0, delayed_alpha))
 
 
 # Approved activation-flash sprite - kept small and quick (TURBO_FLASH_DURATION)
 # so the burst reads as a hit of energy without ever covering nearby lanes.
-const FLASH_TEX_SCALE := 0.32
+const FLASH_TEX_SCALE := 0.52
 
 func _draw_turbo_flash(px: float, py: float) -> void:
 	var t: float = 1.0 - turbo_flash_t / TURBO_FLASH_DURATION
-	var scale: float = lerp(0.5, 1.0, t) * FLASH_TEX_SCALE
-	var alpha: float = 1.0 - t
+	var scale: float = lerp(0.45, 1.25, t) * FLASH_TEX_SCALE
+	var alpha: float = pow(1.0 - t, 1.4)
 	var size: Vector2 = TEX_TURBO_FLASH.get_size() * scale
-	draw_texture_rect(TEX_TURBO_FLASH, Rect2(Vector2(px, py) - size * 0.5, size), false, Color(1, 1, 1, alpha))
+	draw_circle(Vector2(px, py), 54.0 * (1.0 + t), Color(0.45, 0.9, 1.0, alpha * 0.22))
+	draw_texture_rect(TEX_TURBO_FLASH, Rect2(Vector2(px, py) - size * 0.5, size), false, Color(0.78, 0.96, 1.0, alpha))
+
+
+func _draw_turbo_activation_pulse(sz: Vector2, center: Vector2) -> void:
+	var t: float = 1.0 - turbo_flash_t / TURBO_FLASH_DURATION
+	var strength: float = pow(1.0 - t, 2.2)
+	# Brief white-blue exposure kick, followed by radial energy rays.
+	draw_rect(Rect2(Vector2.ZERO, sz), Color(0.55, 0.9, 1.0, strength * 0.16))
+	for i in range(16):
+		var angle: float = TAU * float(i) / 16.0
+		var direction := Vector2(cos(angle), sin(angle))
+		var inner: Vector2 = center + direction * (70.0 + t * 80.0)
+		var outer: Vector2 = center + direction * (190.0 + t * 260.0)
+		draw_line(inner, outer, Color(0.72, 0.94, 1.0, strength * 0.5), 2.5 * strength + 0.5, true)
 
 
 # Deterministic, perspective-aligned streaks keep the center of the road clear.
@@ -2012,7 +2035,8 @@ func _draw_speed_lines(t: float) -> void:
 	var w: float = get_w()
 	var h: float = get_h()
 	var origin := Vector2(w * 0.5, h * 0.18)
-	for i in range(36):
+	var ignition_boost: float = 1.0 + clampf(turbo_flash_t / TURBO_FLASH_DURATION, 0.0, 1.0) * 0.85
+	for i in range(52):
 		var side: float = -1.0 if i % 2 == 0 else 1.0
 		var seed_value: float = float(i) * 0.618034
 		var phase: float = fposmod(t * (0.65 + fposmod(seed_value, 0.5)) + seed_value, 1.0)
@@ -2020,16 +2044,17 @@ func _draw_speed_lines(t: float) -> void:
 		var target := Vector2(w * (0.5 + side * (0.65 + fposmod(seed_value, 0.8))), h * (0.6 + fposmod(seed_value * 2.3, 1.0)))
 		var start: Vector2 = origin.lerp(target, depth)
 		var end: Vector2 = origin.lerp(target, depth + 0.025 + depth * 0.12)
-		var opacity: float = sin(phase * PI) * turbo_visual
-		draw_line(start, end, Color(0.1, 0.65, 1.0, opacity * 0.08), 6.0, true)
-		draw_line(start, end, Color(0.65, 0.92, 1.0, opacity * 0.5), 1.0 + depth * 1.5, true)
+		var opacity: float = sin(phase * PI) * turbo_visual * ignition_boost
+		draw_line(start, end, Color(0.1, 0.65, 1.0, opacity * 0.12), 7.0, true)
+		draw_line(start, end, Color(0.72, 0.95, 1.0, opacity * 0.72), 1.2 + depth * 1.8, true)
 
 
 func _draw_turbo_edges(sz: Vector2) -> void:
 	# Feathered edge light replaces the full-screen orange wash.
 	for i in range(16):
 		var x: float = float(i) * sz.x * 0.006
-		var alpha: float = pow(1.0 - float(i) / 16.0, 2.0) * 0.12 * turbo_visual
+		var ignition_boost: float = 1.0 + clampf(turbo_flash_t / TURBO_FLASH_DURATION, 0.0, 1.0) * 0.7
+		var alpha: float = pow(1.0 - float(i) / 16.0, 2.0) * 0.18 * turbo_visual * ignition_boost
 		var tint := Color(0.04, 0.6, 1.0, alpha)
 		draw_rect(Rect2(x, 0, sz.x * 0.006 + 1.0, sz.y), tint)
 		draw_rect(Rect2(sz.x - x - sz.x * 0.006, 0, sz.x * 0.006 + 1.0, sz.y), tint)
