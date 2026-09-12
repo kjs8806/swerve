@@ -125,16 +125,13 @@ const FOG_MAX_COVERAGE := 0.66
 const FOG_FEATHER := 0.10
 const FOG_MAX_ALPHA := 0.98
 
-# Slick patches (oil/ice) are their own obstacle kind, not a HAZARD_TEXTURES
+# Oil slick patches are their own obstacle kind, not a HAZARD_TEXTURES
 # variant - crossing one is a control debuff (a slowed "slide" lane change),
 # never a coin-loss collision, so it needs its own resolution branch.
 const SLICK_SLIDE_DURATION := 1.6
 const SLICK_SLIDE_LANE_MULT := 2.6
-const SLICK_DRAW_SCALES: Array[float] = [0.30, 0.30]
-const SLICK_TEXTURES := [
-	preload("res://assets/obstacles/oil-slick-hd.png"),
-	preload("res://assets/obstacles/ice-patch-hd.png"),
-]
+const SLICK_DRAW_SCALE := 0.30
+const TEX_OIL_SLICK := preload("res://assets/obstacles/oil-slick-hd.png")
 
 # EMP zones knock the turbo gauge fully offline (deactivating turbo if it was
 # running, zeroing the gauge, and blocking all charging) for their duration -
@@ -875,7 +872,7 @@ func _roll_obstacle_kind() -> Dictionary:
 		return {"kind": "emp", "variant": 0}
 	roll -= emp_p
 	if roll < slick_p:
-		return {"kind": "slick", "variant": randi() % SLICK_TEXTURES.size()}
+		return {"kind": "slick", "variant": 0}
 	roll -= slick_p
 	if roll < hazard_p:
 		return {"kind": "hazard", "variant": randi() % HAZARD_TEXTURES.size()}
@@ -910,8 +907,7 @@ func _obstacle_bounds_at(obstacle: Dictionary, p: float) -> Rect2:
 		var variant: int = int(obstacle["variant"])
 		rendered_size = HAZARD_TEXTURES[variant].get_size() * scale_at(p) * HAZARD_DRAW_SCALES[variant]
 	elif obstacle["kind"] == "slick":
-		var variant: int = int(obstacle["variant"])
-		rendered_size = SLICK_TEXTURES[variant].get_size() * scale_at(p) * SLICK_DRAW_SCALES[variant]
+		rendered_size = TEX_OIL_SLICK.get_size() * scale_at(p) * SLICK_DRAW_SCALE
 	elif obstacle["kind"] == "emp":
 		rendered_size = TEX_EMP_ZONE.get_size() * scale_at(p) * EMP_DRAW_SCALE
 	else:
@@ -1634,9 +1630,8 @@ func _draw_obstacle(obstacle: Dictionary) -> void:
 		var shadow: float = 0.0 if launched or variant == 0 else 0.25
 		_draw_sprite_on_road(HAZARD_TEXTURES[variant], pos, visual_scale * HAZARD_DRAW_SCALES[variant], p, rotation, shadow, flatness, tint)
 	elif obstacle["kind"] == "slick":
-		var variant: int = int(obstacle["variant"])
 		var flatness: float = lerpf(0.58, 0.92, depth)
-		_draw_sprite_on_road(SLICK_TEXTURES[variant], pos, visual_scale * SLICK_DRAW_SCALES[variant], p, rotation, 0.0, flatness, tint)
+		_draw_sprite_on_road(TEX_OIL_SLICK, pos, visual_scale * SLICK_DRAW_SCALE, p, rotation, 0.0, flatness, tint)
 	elif obstacle["kind"] == "emp":
 		var flatness: float = lerpf(0.65, 0.95, depth)
 		_draw_sprite_on_road(TEX_EMP_ZONE, pos, visual_scale * EMP_DRAW_SCALE, p, rotation, 0.18, flatness, tint)
