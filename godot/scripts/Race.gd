@@ -126,11 +126,12 @@ const FOG_FEATHER := 0.10
 const FOG_MAX_ALPHA := 0.98
 
 # Oil slick patches are their own obstacle kind, not a HAZARD_TEXTURES
-# variant - crossing one is a control debuff (a slowed "slide" lane change),
-# never a coin-loss collision, so it needs its own resolution branch.
-const SLICK_SLIDE_DURATION := 1.6
-const SLICK_SLIDE_LANE_MULT := 2.6
-const SLICK_DRAW_SCALE := 0.30
+# variant. Crossing one locks steering for two seconds and produces a
+# visual fishtail, but never causes a coin-loss collision.
+const SLICK_SLIDE_DURATION := 2.0
+# The source is 991px wide. At this scale its visible width tracks the
+# perspective lane width closely from the horizon through the collision row.
+const SLICK_DRAW_SCALE := 0.14
 const TEX_OIL_SLICK := preload("res://assets/obstacles/oil-slick-hd.png")
 
 # EMP zones knock the turbo gauge fully offline (deactivating turbo if it was
@@ -762,6 +763,8 @@ func _play_combo_badge_fx() -> void:
 func try_swerve(dir: int) -> void:
 	if state != State.PLAYING:
 		return
+	if slide_t > 0.0 and not _has_part("grip_tires"):
+		return
 	var now := Time.get_ticks_msec()
 	if now < lane_change_lock_until:
 		return
@@ -1037,8 +1040,6 @@ func _update_game(dt: float) -> void:
 
 	if lane_anim_t < 1.0:
 		var lane_time := LANE_CHANGE_TIME * (0.82 if _has_part("vector_wheel") else 1.0)
-		if slide_t > 0.0 and not _has_part("grip_tires"):
-			lane_time *= SLICK_SLIDE_LANE_MULT
 		lane_anim_t = clampf(lane_anim_t + dt / lane_time, 0.0, 1.0)
 		player_lane_visual = lerp(lane_anim_from, float(player_lane), lane_anim_t)
 
