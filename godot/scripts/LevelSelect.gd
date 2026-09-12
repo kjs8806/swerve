@@ -43,6 +43,20 @@ var pending_sell_id := ""
 
 
 func _ready() -> void:
+	var bay := Control.new()
+	bay.set_script(preload("res://scripts/GarageBackdrop.gd"))
+	bay.show_behind_parent = true
+	add_child(bay)
+	move_child(bay, 0)
+	bay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	backdrop.visible = false
+	$Shade.color = Color(0.01, 0.02, 0.03, 0.18)
+	var shop_bay := Control.new()
+	shop_bay.set_script(preload("res://scripts/GarageBackdrop.gd"))
+	shop_overlay.add_child(shop_bay)
+	shop_overlay.move_child(shop_bay, 0)
+	shop_bay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	$ShopOverlay/Shade.color = Color(0.01, 0.02, 0.03, 0.30)
 	_apply_racing_theme()
 	car_preview.texture = _player_preview()
 	resized.connect(queue_redraw)
@@ -64,8 +78,14 @@ func _draw() -> void:
 	var root_position := get_global_rect().position
 	var city_rect := Rect2(city_panel.get_global_rect().position - root_position - Vector2(10, 9), city_panel.size + Vector2(20, 18))
 	var garage_rect := Rect2(garage_panel.get_global_rect().position - root_position - Vector2(10, 9), garage_panel.size + Vector2(20, 18))
-	draw_style_box(_panel_style(Color(PANEL, 0.90), Color("36506a"), 1, 5), city_rect)
-	draw_style_box(_panel_style(Color(PANEL, 0.94), CYAN, 2, 5), garage_rect)
+	draw_style_box(_panel_style(Color(0.03, 0.05, 0.07, 0.92), Color("53616b"), 2, 3), city_rect)
+	draw_style_box(_panel_style(Color(0.04, 0.06, 0.08, 0.82), Color("53616b"), 2, 3), garage_rect)
+	var car_rect := Rect2(car_preview.global_position - root_position, car_preview.size)
+	var platform := Rect2(car_rect.position + Vector2(24, 12), car_rect.size - Vector2(48, 18))
+	draw_style_box(_panel_style(Color("080d13"), Color("384d5c"), 2, 12), platform)
+	for side in [-1.0, 1.0]:
+		var x: float = platform.get_center().x + float(side) * platform.size.x * 0.36
+		draw_line(Vector2(x, platform.position.y + 12), Vector2(x, platform.end.y - 12), Color("30cdea"), 3, true)
 	var slash_x := garage_rect.position.x + garage_rect.size.x - 62.0
 	draw_colored_polygon(PackedVector2Array([
 		Vector2(slash_x, garage_rect.position.y),
@@ -135,7 +155,10 @@ func _rebuild_shop() -> void:
 		card.custom_minimum_size = Vector2(215, 270)
 		card.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		card.size_flags_vertical = Control.SIZE_FILL
-		card.add_theme_stylebox_override("panel", _panel_style(Color("111d2d"), RARITY_COLORS[part["rarity"]], 2, 10))
+		var tray := _panel_style(Color("17212b"), Color("4d5b68"), 1, 4)
+		tray.border_width_top = 4
+		tray.border_color = RARITY_COLORS[part["rarity"]]
+		card.add_theme_stylebox_override("panel", tray)
 		var card_layout := VBoxContainer.new()
 		card_layout.add_theme_constant_override("separation", 6)
 		card.add_child(card_layout)
@@ -286,11 +309,24 @@ func _condition_text(name: String) -> String:
 
 
 func _apply_racing_theme() -> void:
+	var garage_theme := Theme.new()
+	garage_theme.default_font = preload("res://assets/fonts/Rajdhani-Bold.ttf")
+	garage_theme.default_font_size = 15
+	theme = garage_theme
+	$Shade/Margin/Layout/TopBar/Title.text = "SWERVE   /   MOTORWORKS"
+	$Shade/Margin/Layout/TopBar/Title.add_theme_font_override("font", preload("res://assets/fonts/RacingSansOne-Regular.ttf"))
+	$Shade/Margin/Layout/TopBar/Title.add_theme_color_override("font_color", Color("f4f7fa"))
+	$Shade/Margin/Layout/TopBar/Mode.text = "RACE OPERATIONS   "
+	$Shade/Margin/Layout/Main/GaragePanel/GarageTitle.text = "BAY 01  /  YOUR MACHINE"
+	$Shade/Margin/Layout/Main/GaragePanel/GarageKicker.text = "INSPECT PARTS     •     PREPARE FOR RACE"
+	$ShopOverlay/Shade/Panel/Layout/Header/Title.text = "PERFORMANCE DEPARTMENT"
+	$ShopOverlay/Shade/Panel/Layout/Subtitle.text = "WORKSHOP STOCK    •    INSTALL UPGRADES    •    BUILD YOUR LOADOUT"
+	$ShopOverlay/Shade/Panel/Layout/Header/Title.add_theme_font_override("font", preload("res://assets/fonts/RacingSansOne-Regular.ttf"))
 	var city_panel := $Shade/Margin/Layout/Main/CityPanel
 	var garage_panel := $Shade/Margin/Layout/Main/GaragePanel
 	city_panel.add_theme_constant_override("separation", 7)
 	garage_panel.add_theme_constant_override("separation", 8)
-	$ShopOverlay/Shade/Panel.add_theme_stylebox_override("panel", _panel_style(Color("080f19"), CYAN, 2, 4))
+	$ShopOverlay/Shade/Panel.add_theme_stylebox_override("panel", _panel_style(Color(0.03, 0.05, 0.07, 0.91), Color("53616b"), 2, 4))
 	for button in [
 		$Shade/Margin/Layout/Main/CityPanel/Carousel/Previous,
 		$Shade/Margin/Layout/Main/CityPanel/Carousel/Next,
@@ -314,6 +350,7 @@ func _style_button(button: Button, accent: bool = false, compact: bool = false) 
 	button.add_theme_stylebox_override("hover", _panel_style(hover_bg, line, 3, 5))
 	button.add_theme_stylebox_override("pressed", _panel_style(Color("0c1723"), Color.WHITE, 3, 5))
 	button.add_theme_stylebox_override("disabled", _panel_style(Color("0b121c"), Color("344354"), 1, 5))
+	button.add_theme_stylebox_override("focus", _panel_style(Color(0, 0, 0, 0), Color.WHITE, 2, 5))
 	button.add_theme_color_override("font_color", INK if accent else Color("e8f3ff"))
 	button.add_theme_color_override("font_hover_color", INK if accent else Color.WHITE)
 	button.add_theme_color_override("font_pressed_color", Color.WHITE)
@@ -334,6 +371,9 @@ func _panel_style(background: Color, border: Color, width: int, radius: int) -> 
 	style.content_margin_right = 10
 	style.content_margin_top = 8
 	style.content_margin_bottom = 8
+	style.shadow_color = Color(0, 0, 0, 0.4)
+	style.shadow_size = 4
+	style.shadow_offset = Vector2(0, 3)
 	return style
 
 
