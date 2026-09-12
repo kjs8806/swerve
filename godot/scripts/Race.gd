@@ -688,12 +688,14 @@ func _launch_obstacle(obstacle: Dictionary) -> void:
 # combo reset. Grip Tires makes it a complete non-event (still worth calling
 # out positively so the part visibly earns its keep).
 func _trigger_slick_slide(impact_pos: Vector2, impact_scale: float) -> void:
-	_spawn_spark(impact_pos, impact_scale, NEAR_MISS_FX_DURATION, Color(0.55, 0.8, 1.0))
+	_spawn_spark(impact_pos, impact_scale * 1.4, 0.42, Color(1.0, 0.58, 0.16))
 	if _has_part("grip_tires"):
 		popup_combo("GRIP!", Color(0.4, 1.0, 0.6))
+		near_miss_flash = NEAR_MISS_FLASH_DURATION
 		return
 	slide_t = SLICK_SLIDE_DURATION
-	popup_combo("SLICK!", Color(0.55, 0.8, 1.0))
+	shake_t = maxf(shake_t, SHAKE_DURATION * 0.35)
+	popup_combo("TRACTION LOST", Color(1.0, 0.58, 0.16))
 	_audio_call(&"collision", [true])
 
 
@@ -701,11 +703,13 @@ func _trigger_slick_slide(impact_pos: Vector2, impact_scale: float) -> void:
 # and blocks all charging for the duration - rather than a speed/coin hit.
 # Faraday Coil cuts the disable window down instead of negating it outright.
 func _trigger_emp(impact_pos: Vector2, impact_scale: float) -> void:
-	_spawn_spark(impact_pos, impact_scale, NEAR_MISS_FX_DURATION, Color(0.4, 0.75, 1.0))
+	_spawn_spark(impact_pos, impact_scale * 1.65, 0.48, Color(0.18, 0.82, 1.0))
 	_deactivate_turbo()
 	turbo_gauge = 0.0
 	emp_t = EMP_DURATION * (0.3 if _has_part("faraday_coil") else 1.0)
-	popup_combo("EMP HIT!", Color(0.4, 0.75, 1.0))
+	turbo_flash_t = maxf(turbo_flash_t, TURBO_FLASH_DURATION * 0.65)
+	shake_t = maxf(shake_t, SHAKE_DURATION * 0.5)
+	popup_combo("SYSTEM JAMMED", Color(0.18, 0.82, 1.0))
 	_audio_call(&"collision", [true])
 
 
@@ -989,7 +993,13 @@ func _update_wind(dt: float) -> void:
 func _resolve_wind_gust() -> void:
 	wind_active = false
 	wind_timer = randf_range(active_level.wind_gust_interval_min, active_level.wind_gust_interval_max)
-	if wind_countered or _has_part("stabilizer"):
+	if _has_part("stabilizer"):
+		popup_combo("STABILIZED", Color(0.18, 0.9, 1.0))
+		near_miss_flash = NEAR_MISS_FLASH_DURATION
+		return
+	if wind_countered:
+		popup_combo("GUST DODGED", Color(0.4, 1.0, 0.72))
+		near_miss_flash = NEAR_MISS_FLASH_DURATION
 		return
 	var target: int = clampi(player_lane + int(wind_direction), 0, LANES - 1)
 	if target != player_lane:
@@ -1317,6 +1327,10 @@ func _draw() -> void:
 	var py := player_row_y()
 	var p_scale := scale_at(1.0) * 1.05
 	var player_rotation: float = _lane_visual_rotation(visual_lane, 1.0)
+	if slide_t > 0.0 and not _has_part("grip_tires"):
+		var slide_strength: float = clampf(slide_t / SLICK_SLIDE_DURATION, 0.0, 1.0)
+		px += sin(elapsed_t * 11.0) * get_viewport_rect().size.x * 0.012 * slide_strength
+		player_rotation += sin(elapsed_t * 13.0) * 0.12 * slide_strength
 	var turbo_now := is_turbo
 	var t_now := elapsed_t
 	draw_items.append({"p": 1.001, "cb": func():
@@ -1352,6 +1366,10 @@ func _draw() -> void:
 		draw_rect(Rect2(Vector2.ZERO, sz), Color(1.0, 0.549, 0.078, 0.08 + pulse * 0.05))
 		draw_texture_rect(vignette_tex, Rect2(Vector2.ZERO, sz), false, Color(1, 1, 1, 0.35 + pulse * 0.25))
 	_draw_rain_overlay(sz)
+	if slide_t > 0.0 and not _has_part("grip_tires"):
+		_draw_slick_status_overlay(sz)
+	if emp_t > 0.0:
+		_draw_emp_status_overlay(sz)
 	if wind_active:
 		_draw_wind_overlay(sz)
 
@@ -1447,6 +1465,30 @@ func _draw_wind_overlay(size: Vector2) -> void:
 	var tail_a := Vector2(cx - dir * arrow_w * 0.5, ay - 14.0 * arrow_scale)
 	var tail_b := Vector2(cx - dir * arrow_w * 0.5, ay + 14.0 * arrow_scale)
 	draw_colored_polygon(PackedVector2Array([tip, tail_a, tail_b]), Color(wind_color, arrow_alpha))
+
+
+func _draw_slick_status_overlay(size: Vector2) -> void:
+	var strength: float = clampf(slide_t / SLICK_SLIDE_DURATION, 0.0, 1.0)
+	var pulse: float = 0.65 + sin(elapsed_t * 12.0) * 0.15
+	var edge_color := Color(1.0, 0.38, 0.08, 0.10 * strength * pulse)
+	draw_rect(Rect2(0.0, 0.0, size.x * 0.055, size.y), edge_color)
+	draw_rect(Rect2(size.x * 0.945, 0.0, size.x * 0.055, size.y), edge_color)
+	for i in range(9):
+		var fi := float(i)
+		var y := size.y * (0.2 + fi * 0.075)
+		var sway := sin(elapsed_t * 10.0 + fi * 0.9) * size.x * 0.035
+		draw_line(Vector2(size.x * 0.42 + sway, y), Vector2(size.x * 0.58 + sway, y + 7.0), Color(1.0, 0.7, 0.24, 0.11 * strength), 2.0, true)
+
+
+func _draw_emp_status_overlay(size: Vector2) -> void:
+	var max_duration := EMP_DURATION * (0.3 if _has_part("faraday_coil") else 1.0)
+	var strength: float = clampf(emp_t / max_duration, 0.0, 1.0)
+	var flicker: float = 0.55 + 0.45 * abs(sin(elapsed_t * 31.0))
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0.05, 0.55, 0.9, 0.045 * strength * flicker))
+	for i in range(8):
+		var y := fmod(float(i) * size.y * 0.173 + elapsed_t * 190.0, size.y)
+		var segment_x := fmod(float(i * 97) + elapsed_t * 73.0, size.x * 0.42)
+		draw_rect(Rect2(segment_x, y, size.x * 0.34, 2.0), Color(0.22, 0.9, 1.0, 0.12 * strength * flicker))
 
 
 func _draw_coin_item(coin: Dictionary) -> void:
@@ -1632,12 +1674,40 @@ func _draw_obstacle(obstacle: Dictionary) -> void:
 	elif obstacle["kind"] == "slick":
 		var flatness: float = lerpf(0.58, 0.92, depth)
 		_draw_sprite_on_road(TEX_OIL_SLICK, pos, visual_scale * SLICK_DRAW_SCALE, p, rotation, 0.0, flatness, tint)
+		_draw_slick_shimmer(pos, visual_scale, rotation, flatness, tint.a)
 	elif obstacle["kind"] == "emp":
 		var flatness: float = lerpf(0.65, 0.95, depth)
 		_draw_sprite_on_road(TEX_EMP_ZONE, pos, visual_scale * EMP_DRAW_SCALE, p, rotation, 0.18, flatness, tint)
+		_draw_emp_hazard_energy(pos, visual_scale, rotation, flatness, tint.a)
 	else:
 		var car_flatness: float = lerpf(0.88, 1.0, depth)
 		_draw_angle_sprite_on_road(TRAFFIC_ANGLE_SHEETS[obstacle["variant"]], _angle_frame_for_lane(lane), pos, visual_scale * HD_VEHICLE_SCALE, p, 0.0 if launched else 0.32, car_flatness, rotation if launched else 0.0, tint)
+
+
+func _draw_slick_shimmer(pos: Vector2, visual_scale: float, rotation: float, flatness: float, alpha_scale: float) -> void:
+	var phase: float = fmod(elapsed_t * 1.8, TAU)
+	var radius: float = 122.0 * visual_scale
+	draw_set_transform(pos, rotation, Vector2(1.0, flatness))
+	draw_arc(Vector2.ZERO, radius * 0.72, phase, phase + 1.9, 22, Color(0.15, 0.82, 1.0, 0.34 * alpha_scale), maxf(1.0, 3.0 * visual_scale), true)
+	draw_arc(Vector2.ZERO, radius * 0.50, phase + 2.1, phase + 4.0, 20, Color(0.78, 0.3, 1.0, 0.28 * alpha_scale), maxf(1.0, 2.4 * visual_scale), true)
+	draw_arc(Vector2.ZERO, radius * 0.86, phase + 4.0, phase + 5.45, 18, Color(1.0, 0.58, 0.12, 0.24 * alpha_scale), maxf(1.0, 2.2 * visual_scale), true)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+func _draw_emp_hazard_energy(pos: Vector2, visual_scale: float, rotation: float, flatness: float, alpha_scale: float) -> void:
+	var pulse: float = 0.5 + 0.5 * sin(elapsed_t * 7.5)
+	var radius: float = 128.0 * visual_scale
+	draw_set_transform(pos, rotation, Vector2(1.0, flatness))
+	for ring in range(2):
+		var ring_radius := radius * (0.72 + float(ring) * 0.22 + pulse * 0.06)
+		var ring_alpha := (0.30 - float(ring) * 0.09) * alpha_scale
+		draw_arc(Vector2.ZERO, ring_radius, 0.0, TAU, 32, Color(0.12, 0.78, 1.0, ring_alpha), maxf(1.0, (3.0 - ring) * visual_scale), true)
+	var orbit_phase := elapsed_t * 2.8
+	for i in range(6):
+		var angle := orbit_phase + TAU * float(i) / 6.0
+		var node_pos := Vector2(cos(angle), sin(angle)) * radius * 0.82
+		draw_circle(node_pos, maxf(1.5, 4.0 * visual_scale), Color(0.72, 0.96, 1.0, 0.72 * alpha_scale))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 func _draw_sky(w: float, hy: float) -> void:
