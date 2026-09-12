@@ -1,27 +1,27 @@
 extends RefCounted
 
-# Combos 1-9 rotate through short driving words in Italian, French, and
-# Korean. Combo 10 and every value above it use the recorded Swerve callout.
-const SWERVE_STREAM := preload("res://assets/audio/combo-voice/callout-10-swerve.wav")
+# The combo ladder is "swerve/shift" around the world, climbing to the English
+# "Swerve!" at 10x and above. Every line is the same broadcaster voice as the
+# rest of the pack. The displayed text is romanized because RacingSansOne
+# carries no Hangul, CJK, Arabic or Devanagari glyphs and would draw the native
+# spelling as blank boxes - the voice still says the real word.
 const CALLOUTS: Array[Dictionary] = [
-	{"text": "Scarto!", "speech": "Scarto", "language": "it"},
-	{"text": "Virage!", "speech": "Virage", "language": "fr"},
-	{"text": "회피!", "speech": "회피", "language": "ko"},
-	{"text": "Scarto!", "speech": "Scarto", "language": "it"},
-	{"text": "Virage!", "speech": "Virage", "language": "fr"},
-	{"text": "회피!", "speech": "회피", "language": "ko"},
-	{"text": "Scarto!", "speech": "Scarto", "language": "it"},
-	{"text": "Virage!", "speech": "Virage", "language": "fr"},
-	{"text": "회피!", "speech": "회피", "language": "ko"},
+	{"text": "Scarto!", "stream": preload("res://assets/audio/combo-voice/callout-01-scarto.wav")},      # Italian
+	{"text": "Virage!", "stream": preload("res://assets/audio/combo-voice/callout-02-virage.wav")},      # French
+	{"text": "¡Desvía!", "stream": preload("res://assets/audio/combo-voice/callout-03-desvia.wav")},     # Spanish
+	{"text": "Muda!", "stream": preload("res://assets/audio/combo-voice/callout-04-muda.wav")},          # Portuguese
+	{"text": "Tahawwal!", "stream": preload("res://assets/audio/combo-voice/callout-05-tahawwal.wav")},  # Arabic
+	{"text": "Badlo!", "stream": preload("res://assets/audio/combo-voice/callout-06-badlo.wav")},        # Hindi
+	{"text": "Shifuto!", "stream": preload("res://assets/audio/combo-voice/callout-07-shifuto.wav")},    # Japanese
+	{"text": "Huan Dang!", "stream": preload("res://assets/audio/combo-voice/callout-08-huandang.wav")}, # Chinese
+	{"text": "Hoepi!", "stream": preload("res://assets/audio/combo-voice/callout-09-hoepi.wav")},        # Korean
+	{"text": "Swerve!", "stream": preload("res://assets/audio/combo-voice/callout-10-swerve.wav")},      # English
 ]
 
 
 static func for_combo(combo_value: int) -> Dictionary:
-	if combo_value >= 10 or combo_value < 1:
-		return {"text": "Swerve!", "stream": SWERVE_STREAM}
-	var callout: Dictionary = CALLOUTS[combo_value - 1].duplicate()
-	callout["stream"] = SWERVE_STREAM
-	return callout
+	var index := clampi(combo_value, 1, CALLOUTS.size()) - 1
+	return CALLOUTS[index]
 
 
 static func stream_for_combo(combo_value: int) -> AudioStream:
