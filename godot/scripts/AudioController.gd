@@ -41,7 +41,6 @@ const STREAM_FINISH_WIN := preload("res://assets/audio/finish-win.wav")
 const STREAM_TIME_UP := preload("res://assets/audio/time-up-failure.wav")
 
 var background_music: AudioStreamPlayer
-var combo_voice: AudioStreamPlayer
 var engine_idle: AudioStreamPlayer
 var engine_drive: AudioStreamPlayer
 var turbo_sustain: AudioStreamPlayer
@@ -60,7 +59,6 @@ var last_countdown_second := -1
 
 func _ready() -> void:
 	background_music = _make_player("BackgroundMusic", STREAM_BACKGROUND_MUSIC, SILENT_DB)
-	combo_voice = _make_player("ComboVoice", ComboCalloutConfig.stream_for_combo(1), -4.0)
 	engine_idle = _make_player("EngineIdle", STREAM_ENGINE_IDLE, ENGINE_IDLE_DB)
 	engine_drive = _make_player("EngineDrive", STREAM_ENGINE_DRIVE, SILENT_DB)
 	turbo_sustain = _make_player("TurboSustain", STREAM_TURBO_SUSTAIN, SILENT_DB)
@@ -71,7 +69,9 @@ func _ready() -> void:
 
 	_add_sfx("lane_change", STREAM_LANE_CHANGE, -8.0, 2)
 	_add_sfx("coin", STREAM_COIN, -5.0, 4)
-	_add_sfx("combo", STREAM_COMBO, -7.0, 3)
+	_add_sfx("combo", _combo_sound(0), -15.0)
+	_add_sfx("combo_milestone", _combo_sound(1), -12.0)
+	_add_sfx("combo_break", _combo_sound(2), -20.0)
 	_add_sfx("collision", STREAM_COLLISION, -3.0)
 	_add_sfx("road_hit", STREAM_ROAD_HIT, -6.0, 2)
 	_add_sfx("turbo_charge", STREAM_TURBO_CHARGE, -8.0)
@@ -240,11 +240,47 @@ func coin_collected() -> void:
 
 
 func combo_increased(combo_value: int = 1) -> void:
-	_play("combo")
-	# Only the newest praise line should be heard when combos increase quickly.
-	combo_voice.stop()
-	combo_voice.stream = ComboCalloutConfig.stream_for_combo(combo_value)
-	combo_voice.play()
+	var player := sfx_players["combo"] as AudioStreamPlayer
+	player.pitch_scale = 1.0 + minf(float(combo_value - 1), 10.0) * 0.025
+	player.stop()
+	player.play()
+	if combo_value % 5 == 0:
+		_play("combo_milestone")
+
+
+func combo_broken() -> void:
+	_play("combo_break")
+
+
+# Short original cues, generated once at startup; no spoken callouts.
+func _combo_sound(kind: int) -> AudioStreamWAV:
+	var rate: int = 22050
+	var duration: float = 0.24 if kind == 1 else 0.14
+	var data := PackedByteArray()
+	var count: int = int(rate * duration)
+	data.resize(count * 2)
+	var phase: float = 0.0
+	var noise: float = 0.0
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 731
+	for i in range(count):
+		var t: float = float(i) / rate
+		var progress: float = t / duration
+		var frequency: float = 520.0 if kind == 0 else (660.0 if kind == 1 else lerpf(420.0, 180.0, progress))
+		phase += TAU * frequency / rate
+		var envelope: float = minf(t / 0.008, 1.0) * pow(1.0 - progress, 2.0)
+		noise = lerpf(noise, rng.randf_range(-1.0, 1.0), 0.22)
+		var sample_value: float = sin(phase) * 0.24
+		if kind == 0:
+			sample_value += noise * 0.65 + sin(t * TAU * 1700.0) * exp(-t * 190.0) * 0.25
+		elif kind == 1:
+			sample_value += sin(phase * 1.5) * 0.18
+		data.encode_s16(i * 2, int(clampf(sample_value * envelope, -1.0, 1.0) * 32767.0))
+	var stream := AudioStreamWAV.new()
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = rate
+	stream.data = data
+	return stream
 
 
 func collision(is_road_hazard: bool) -> void:
