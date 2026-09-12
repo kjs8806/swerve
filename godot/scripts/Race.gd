@@ -171,6 +171,7 @@ var win_flash: float = 0.0
 var shake_t: float = 0.0
 var turbo_ring_t: float = 0.0
 var turbo_flash_t: float = 0.0
+var turbo_visual: float = 0.0
 var coin_punch_t: float = 0.0
 var coin_loss_punch_t: float = 0.0
 var near_miss_flash: float = 0.0
@@ -587,6 +588,7 @@ func reset_game(play_ui_tap: bool = false) -> void:
 	shake_t = 0.0
 	turbo_ring_t = 0.0
 	turbo_flash_t = 0.0
+	turbo_visual = 0.0
 	coin_punch_t = 0.0
 	coin_loss_punch_t = 0.0
 	near_miss_flash = 0.0
@@ -1226,6 +1228,7 @@ func _update_game(dt: float) -> void:
 		win_flash = maxf(0.0, win_flash - dt)
 	if shake_t > 0.0:
 		shake_t = maxf(0.0, shake_t - dt)
+	turbo_visual = move_toward(turbo_visual, 1.0 if is_turbo else 0.0, dt * (5.0 if is_turbo else 3.0))
 	if turbo_ring_t > 0.0:
 		turbo_ring_t = maxf(0.0, turbo_ring_t - dt)
 	if turbo_flash_t > 0.0:
@@ -1336,14 +1339,15 @@ func _update_hud() -> void:
 	if turbo_banner != null:
 		turbo_banner.visible = is_turbo
 	if is_turbo and turbo_banner != null:
-		var glow: float = 0.8 + 0.2 * sin(elapsed_t * 8.0)
-		turbo_banner.modulate = Color(glow, glow, glow, 1.0)
+		var glow: float = 0.92 + 0.08 * sin(elapsed_t * 3.0)
+		turbo_banner.modulate = Color(0.45, glow, 1.0, 1.0)
+	turbo_gauge_track.modulate = Color(1.0 - turbo_visual * 0.25, 1.0, 1.0)
 
 
 # ---------- Rendering ----------
 func _draw() -> void:
 	_draw_road()
-	if is_turbo:
+	if turbo_visual > 0.001:
 		_draw_speed_lines(elapsed_t)
 
 	# Everything on the road - coins, traffic, the finish tape, and the
@@ -1402,10 +1406,8 @@ func _draw() -> void:
 		draw_rect(Rect2(Vector2.ZERO, sz), Color(0.208, 0.878, 0.631, near_miss_flash / NEAR_MISS_FLASH_DURATION * 0.14))
 	if win_flash > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, sz), Color(1, 1, 1, win_flash * 0.6))
-	if is_turbo:
-		var pulse: float = 0.5 + 0.5 * sin(elapsed_t * 8.0)
-		draw_rect(Rect2(Vector2.ZERO, sz), Color(1.0, 0.549, 0.078, 0.08 + pulse * 0.05))
-		draw_texture_rect(vignette_tex, Rect2(Vector2.ZERO, sz), false, Color(1, 1, 1, 0.35 + pulse * 0.25))
+	if turbo_visual > 0.001:
+		_draw_turbo_edges(sz)
 	_draw_rain_overlay(sz)
 	if slide_t > 0.0 and not _has_part("grip_tires"):
 		_draw_slick_status_overlay(sz)
@@ -1962,11 +1964,20 @@ const FLAME_TEX_SCALE := 0.34
 
 
 func _draw_flame_trail(pos: Vector2, scale: float, t: float, rotation: float = 0.0) -> void:
-	var flicker: float = 0.82 + 0.18 * sin(t * 30.0)
+	var flicker: float = 0.94 + 0.06 * sin(t * 23.0)
 	var size: Vector2 = TEX_TURBO_EXHAUST.get_size() * (FLAME_TEX_SCALE * scale)
 	var local_origin := Vector2(0.0, 26.0 * scale)
 	draw_set_transform(pos, rotation, Vector2.ONE)
-	draw_texture_rect(TEX_TURBO_EXHAUST, Rect2(local_origin - Vector2(size.x * 0.5, 0.0), size), false, Color(1, 1, 1, flicker))
+	# Layered tapered jets: soft outer plume, cyan body, white hot core.
+	for side in [-1.0, 1.0]:
+		var nozzle := Vector2(side * 17.0 * scale, 29.0 * scale)
+		var jet_length: float = (85.0 + 12.0 * sin(t * 19.0 + side)) * scale
+		for layer in range(3):
+			var width: float = (14.0 - layer * 4.0) * scale
+			var length: float = jet_length * (1.0 - layer * 0.22)
+			var tint: Color = [Color(0.05, 0.45, 1.0, 0.15), Color(0.1, 0.85, 1.0, 0.55), Color(0.85, 0.98, 1.0, 0.9)][layer]
+			draw_colored_polygon(PackedVector2Array([nozzle + Vector2(-width, 0), nozzle + Vector2(-width * 0.45, length * 0.65), nozzle + Vector2(0, length), nozzle + Vector2(width * 0.45, length * 0.65), nozzle + Vector2(width, 0)]), tint)
+	draw_texture_rect(TEX_TURBO_EXHAUST, Rect2(local_origin - Vector2(size.x * 0.5, 0.0), size), false, Color(0.6, 0.85, 1, flicker * 0.65))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
@@ -1978,8 +1989,8 @@ const RING_TEX_MAX_SCALE := 1.0
 
 func _draw_turbo_ring(px: float, py: float) -> void:
 	var t: float = 1.0 - turbo_ring_t / TURBO_RING_DURATION
-	var scale: float = lerp(RING_TEX_MIN_SCALE, RING_TEX_MAX_SCALE, t)
-	var alpha: float = 1.0 - t
+	var scale: float = lerp(RING_TEX_MIN_SCALE, RING_TEX_MAX_SCALE, 1.0 - pow(1.0 - t, 3.0))
+	var alpha: float = (1.0 - t) * (1.0 - t)
 	var size: Vector2 = TEX_TURBO_RING.get_size() * scale
 	draw_texture_rect(TEX_TURBO_RING, Rect2(Vector2(px, py) - size * 0.5, size), false, Color(1, 1, 1, alpha))
 
@@ -1996,14 +2007,29 @@ func _draw_turbo_flash(px: float, py: float) -> void:
 	draw_texture_rect(TEX_TURBO_FLASH, Rect2(Vector2(px, py) - size * 0.5, size), false, Color(1, 1, 1, alpha))
 
 
-# Approved speed-line burst, stretched to cover the viewport - the art
-# itself is mostly negative space between rays, so traffic/hazards stay
-# readable through the gaps rather than being covered by a solid layer.
-# Alpha is tied to the remaining turbo gauge (not just is_turbo) so it
-# tapers off smoothly as turbo drains instead of vanishing on the frame
-# is_turbo flips false.
+# Deterministic, perspective-aligned streaks keep the center of the road clear.
 func _draw_speed_lines(t: float) -> void:
-	var pulse: float = 0.85 + 0.15 * sin(t * SPEED_LINE_PULSE_SPEED)
-	var fade_out: float = clampf(turbo_gauge / (TURBO_GAUGE_MAX * 0.15), 0.0, 1.0)
-	var alpha: float = SPEED_LINE_ALPHA * pulse * fade_out
-	draw_texture_rect(TEX_TURBO_SPEED_LINES, Rect2(0, 0, get_w(), get_h()), false, Color(1, 1, 1, alpha))
+	var w: float = get_w()
+	var h: float = get_h()
+	var origin := Vector2(w * 0.5, h * 0.18)
+	for i in range(36):
+		var side: float = -1.0 if i % 2 == 0 else 1.0
+		var seed_value: float = float(i) * 0.618034
+		var phase: float = fposmod(t * (0.65 + fposmod(seed_value, 0.5)) + seed_value, 1.0)
+		var depth: float = phase * phase
+		var target := Vector2(w * (0.5 + side * (0.65 + fposmod(seed_value, 0.8))), h * (0.6 + fposmod(seed_value * 2.3, 1.0)))
+		var start: Vector2 = origin.lerp(target, depth)
+		var end: Vector2 = origin.lerp(target, depth + 0.025 + depth * 0.12)
+		var opacity: float = sin(phase * PI) * turbo_visual
+		draw_line(start, end, Color(0.1, 0.65, 1.0, opacity * 0.08), 6.0, true)
+		draw_line(start, end, Color(0.65, 0.92, 1.0, opacity * 0.5), 1.0 + depth * 1.5, true)
+
+
+func _draw_turbo_edges(sz: Vector2) -> void:
+	# Feathered edge light replaces the full-screen orange wash.
+	for i in range(16):
+		var x: float = float(i) * sz.x * 0.006
+		var alpha: float = pow(1.0 - float(i) / 16.0, 2.0) * 0.12 * turbo_visual
+		var tint := Color(0.04, 0.6, 1.0, alpha)
+		draw_rect(Rect2(x, 0, sz.x * 0.006 + 1.0, sz.y), tint)
+		draw_rect(Rect2(sz.x - x - sz.x * 0.006, 0, sz.x * 0.006 + 1.0, sz.y), tint)
