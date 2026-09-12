@@ -28,3 +28,5 @@ coin_run_min = 1
 coin_run_max = 1
 fog_density = 1.0
 fog_color = Color(0.38, 0.3, 0.5, 1.0)
+slick_chance = 0.15
+emp_chance = 0.08

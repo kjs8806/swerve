@@ -25,6 +25,9 @@ const PARTS := [
 	{"id":"nightvision_visor", "name":"NightVision Visor", "price":110, "rarity":"TUNED", "ability":"nightvision", "description":"Cuts fog and rain obstruction in half.", "icon_path":"res://assets/hud/parts/nightvision-visor.png"},
 	{"id":"slipstream_coil", "name":"Slipstream Coil", "price":120, "rarity":"TUNED", "ability":"near_miss_charge", "description":"Near misses fill 25% turbo instead of 20%.", "icon_path":"res://assets/hud/parts/slipstream-coil.png"},
 	{"id":"impact_reserve", "name":"Impact Reserve", "price":140, "rarity":"PROTOTYPE", "ability":"turbo_retention", "description":"Keeps half of your turbo charge when a collision breaks the combo.", "icon_path":"res://assets/hud/parts/impact-reserve.png"},
+	{"id":"grip_tires", "name":"Grip Tires", "price":85, "rarity":"STANDARD", "ability":"grip_tires", "description":"Ignores oil and ice patches entirely.", "icon_path":"res://assets/hud/parts/grip-tires.png"},
+	{"id":"stabilizer", "name":"Stabilizer", "price":115, "rarity":"TUNED", "ability":"stabilizer", "description":"Wind gusts never force you off your line.", "icon_path":"res://assets/hud/parts/stabilizer.png"},
+	{"id":"faraday_coil", "name":"Faraday Coil", "price":135, "rarity":"PROTOTYPE", "ability":"faraday_coil", "description":"Cuts EMP disable time by 70%.", "icon_path":"res://assets/hud/parts/faraday-coil.png"},
 ]
 
 

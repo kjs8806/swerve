@@ -22,3 +22,4 @@ coin_interval_min = 1.2
 coin_interval_max = 1.9
 coin_run_min = 1
 coin_run_max = 3
+slick_chance = 0.07

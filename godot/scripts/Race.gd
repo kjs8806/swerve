@@ -125,6 +125,31 @@ const FOG_MAX_COVERAGE := 0.66
 const FOG_FEATHER := 0.10
 const FOG_MAX_ALPHA := 0.98
 
+# Slick patches (oil/ice) are their own obstacle kind, not a HAZARD_TEXTURES
+# variant - crossing one is a control debuff (a slowed "slide" lane change),
+# never a coin-loss collision, so it needs its own resolution branch.
+const SLICK_SLIDE_DURATION := 1.6
+const SLICK_SLIDE_LANE_MULT := 2.6
+const SLICK_DRAW_SCALES: Array[float] = [0.30, 0.30]
+const SLICK_TEXTURES := [
+	preload("res://assets/obstacles/oil-slick-hd.png"),
+	preload("res://assets/obstacles/ice-patch-hd.png"),
+]
+
+# EMP zones knock the turbo gauge fully offline (deactivating turbo if it was
+# running, zeroing the gauge, and blocking all charging) for their duration -
+# a harsher, more targeted disruption than a normal hazard's speed penalty.
+const EMP_DURATION := 3.5
+const EMP_DRAW_SCALE := 0.30
+const TEX_EMP_ZONE := preload("res://assets/obstacles/emp-zone-hd.png")
+
+# Wind gusts are a periodic sideways push rather than a lane-based obstacle:
+# swerving away from the push direction at any point during a gust counters
+# it; otherwise it shoves the player one lane over when it ends. The visual
+# sway is purely cosmetic feedback for how close the gust is to landing.
+const WIND_GUST_DURATION := 2.6
+const WIND_SWAY_MAX := 0.34
+
 enum State { READY, PLAYING, PAUSED, WIN, LOSE }
 
 # ---------- State ----------
@@ -161,6 +186,13 @@ var coin_timer: float = 0.0
 var phantom_differential_used := false
 var clean_lane_changes := 0
 var collected_coin_count := 0
+var slide_t: float = 0.0
+var emp_t: float = 0.0
+var wind_timer: float = 0.0
+var wind_active: bool = false
+var wind_direction: float = 1.0
+var wind_gust_t: float = 0.0
+var wind_countered: bool = false
 
 var elapsed_t: float = 0.0
 var lane_change_lock_until: int = 0
@@ -546,6 +578,12 @@ func reset_game(play_ui_tap: bool = false) -> void:
 	phantom_differential_used = false
 	clean_lane_changes = 0
 	collected_coin_count = 0
+	slide_t = 0.0
+	emp_t = 0.0
+	wind_active = false
+	wind_gust_t = 0.0
+	wind_countered = false
+	wind_timer = randf_range(active_level.wind_gust_interval_min, active_level.wind_gust_interval_max) if active_level.wind_enabled else 0.0
 	overlay.visible = false
 	menu_actions.visible = false
 	overlay_button.visible = true
@@ -649,6 +687,31 @@ func _launch_obstacle(obstacle: Dictionary) -> void:
 	_audio_call(&"collision", [obstacle["kind"] == "hazard"])
 
 
+# A pure control debuff, not damage - no coin loss, no speed penalty, no
+# combo reset. Grip Tires makes it a complete non-event (still worth calling
+# out positively so the part visibly earns its keep).
+func _trigger_slick_slide(impact_pos: Vector2, impact_scale: float) -> void:
+	_spawn_spark(impact_pos, impact_scale, NEAR_MISS_FX_DURATION, Color(0.55, 0.8, 1.0))
+	if _has_part("grip_tires"):
+		popup_combo("GRIP!", Color(0.4, 1.0, 0.6))
+		return
+	slide_t = SLICK_SLIDE_DURATION
+	popup_combo("SLICK!", Color(0.55, 0.8, 1.0))
+	_audio_call(&"collision", [true])
+
+
+# Knocks turbo fully offline - deactivates it if running, drains the gauge,
+# and blocks all charging for the duration - rather than a speed/coin hit.
+# Faraday Coil cuts the disable window down instead of negating it outright.
+func _trigger_emp(impact_pos: Vector2, impact_scale: float) -> void:
+	_spawn_spark(impact_pos, impact_scale, NEAR_MISS_FX_DURATION, Color(0.4, 0.75, 1.0))
+	_deactivate_turbo()
+	turbo_gauge = 0.0
+	emp_t = EMP_DURATION * (0.3 if _has_part("faraday_coil") else 1.0)
+	popup_combo("EMP HIT!", Color(0.4, 0.75, 1.0))
+	_audio_call(&"collision", [true])
+
+
 func popup_combo(text: String, color: Color) -> void:
 	if combo_popup_tween != null and combo_popup_tween.is_valid():
 		combo_popup_tween.kill()
@@ -702,6 +765,9 @@ func try_swerve(dir: int) -> void:
 	if now < lane_change_lock_until:
 		return
 	lane_change_lock_until = now + (75 if _has_part("vector_wheel") else 90)
+	if wind_active and not wind_countered and dir == -wind_direction:
+		wind_countered = true
+		popup_combo("HELD STEADY!", Color(0.55, 0.85, 1.0))
 	var target: int = clampi(player_lane + dir, 0, LANES - 1)
 	if target == player_lane:
 		return
@@ -784,17 +850,36 @@ func _spawn_obstacle_wave() -> void:
 	for lane in free_lanes:
 		if spawned.size() >= count:
 			break
-		var is_hazard := randf() < active_level.hazard_chance_at(time)
+		var kind_and_variant := _roll_obstacle_kind()
 		var candidate := {
 			"lane": lane, "p": 0.0, "resolved": false,
 			"dodged": false, "was_near": false,
-			"kind": "hazard" if is_hazard else "traffic",
-			"variant": randi() % (HAZARD_TEXTURES.size() if is_hazard else TRAFFIC_ANGLE_SHEETS.size()),
+			"kind": kind_and_variant["kind"], "variant": kind_and_variant["variant"],
 		}
 		if _obstacle_path_is_clear(candidate, spawned):
 			spawned.append(candidate)
 
 	obstacles.append_array(spawned)
+
+
+# EMP and slick each get their own independent roll on top of the normal
+# hazard/traffic split, so they read as occasional disruptions layered onto
+# the base mix rather than replacing it. Order (emp, slick, hazard, traffic)
+# just partitions one random roll into four bands.
+func _roll_obstacle_kind() -> Dictionary:
+	var roll := randf()
+	var emp_p := active_level.emp_chance
+	var slick_p := active_level.slick_chance
+	var hazard_p := active_level.hazard_chance_at(time)
+	if roll < emp_p:
+		return {"kind": "emp", "variant": 0}
+	roll -= emp_p
+	if roll < slick_p:
+		return {"kind": "slick", "variant": randi() % SLICK_TEXTURES.size()}
+	roll -= slick_p
+	if roll < hazard_p:
+		return {"kind": "hazard", "variant": randi() % HAZARD_TEXTURES.size()}
+	return {"kind": "traffic", "variant": randi() % TRAFFIC_ANGLE_SHEETS.size()}
 
 
 func _obstacle_path_is_clear(candidate: Dictionary, same_wave: Array) -> bool:
@@ -824,6 +909,11 @@ func _obstacle_bounds_at(obstacle: Dictionary, p: float) -> Rect2:
 	if obstacle["kind"] == "hazard":
 		var variant: int = int(obstacle["variant"])
 		rendered_size = HAZARD_TEXTURES[variant].get_size() * scale_at(p) * HAZARD_DRAW_SCALES[variant]
+	elif obstacle["kind"] == "slick":
+		var variant: int = int(obstacle["variant"])
+		rendered_size = SLICK_TEXTURES[variant].get_size() * scale_at(p) * SLICK_DRAW_SCALES[variant]
+	elif obstacle["kind"] == "emp":
+		rendered_size = TEX_EMP_ZONE.get_size() * scale_at(p) * EMP_DRAW_SCALE
 	else:
 		var sheet: Texture2D = TRAFFIC_ANGLE_SHEETS[int(obstacle["variant"])]
 		rendered_size = Vector2(sheet.get_width() / float(VEHICLE_ANGLE_FRAME_COUNT), sheet.get_height()) * scale_at(p) * HD_VEHICLE_SCALE
@@ -879,6 +969,52 @@ func _deactivate_turbo(clear_gauge: bool = true) -> void:
 	_audio_call(&"set_turbo", [false])
 
 
+# ---------- Wind ----------
+# A gust either gets countered (the player swerves away from the push
+# direction at any point while it's active - see try_swerve) or, if it
+# expires uncountered, shoves the player one lane toward the push. The
+# Stabilizer part treats every gust as already countered.
+func _update_wind(dt: float) -> void:
+	if wind_active:
+		wind_gust_t = maxf(0.0, wind_gust_t - dt)
+		if wind_gust_t <= 0.0:
+			_resolve_wind_gust()
+		return
+	wind_timer -= dt
+	if wind_timer <= 0.0:
+		wind_active = true
+		wind_countered = false
+		wind_gust_t = WIND_GUST_DURATION
+		wind_direction = -1.0 if randi() % 2 == 0 else 1.0
+		popup_combo("WIND GUST!", Color(0.6, 0.85, 1.0))
+		_audio_call(&"wind_gust")
+
+
+func _resolve_wind_gust() -> void:
+	wind_active = false
+	wind_timer = randf_range(active_level.wind_gust_interval_min, active_level.wind_gust_interval_max)
+	if wind_countered or _has_part("stabilizer"):
+		return
+	var target: int = clampi(player_lane + int(wind_direction), 0, LANES - 1)
+	if target != player_lane:
+		lane_anim_from = player_lane_visual
+		player_lane = target
+		lane_anim_t = 0.0
+		popup_combo("GUST PUSHED YOU!", Color(1.0, 0.7, 0.3))
+		_audio_call(&"lane_changed")
+
+
+# Purely cosmetic - grows toward the push direction as the gust nears
+# resolution, giving a visual read on how close it is to shoving the player
+# over, but never touches player_lane_visual itself (collision math and the
+# lane-change animation both stay untouched).
+func _wind_sway() -> float:
+	if _has_part("stabilizer") or not wind_active or wind_countered:
+		return 0.0
+	var progress: float = 1.0 - wind_gust_t / WIND_GUST_DURATION
+	return wind_direction * WIND_SWAY_MAX * progress
+
+
 # ---------- Update ----------
 func _process(delta: float) -> void:
 	elapsed_t += delta
@@ -895,6 +1031,8 @@ func _update_game(dt: float) -> void:
 
 	if lane_anim_t < 1.0:
 		var lane_time := LANE_CHANGE_TIME * (0.82 if _has_part("vector_wheel") else 1.0)
+		if slide_t > 0.0 and not _has_part("grip_tires"):
+			lane_time *= SLICK_SLIDE_LANE_MULT
 		lane_anim_t = clampf(lane_anim_t + dt / lane_time, 0.0, 1.0)
 		player_lane_visual = lerp(lane_anim_from, float(player_lane), lane_anim_t)
 
@@ -902,12 +1040,19 @@ func _update_game(dt: float) -> void:
 		penalty_t = maxf(0.0, penalty_t - dt)
 	if boost_t > 0.0:
 		boost_t = maxf(0.0, boost_t - dt)
+	if slide_t > 0.0:
+		slide_t = maxf(0.0, slide_t - dt)
+	if emp_t > 0.0:
+		emp_t = maxf(0.0, emp_t - dt)
 
 	if is_turbo:
 		var drain := TURBO_DRAIN_PER_SEC / (1.35 if _has_part("turbo_dynamo") else 1.0)
 		turbo_gauge = maxf(0.0, turbo_gauge - drain * dt)
 		if turbo_gauge <= 0.0:
 			_deactivate_turbo()
+
+	if active_level.wind_enabled:
+		_update_wind(dt)
 
 	var speed := current_speed()
 	distance += speed * dt
@@ -929,7 +1074,20 @@ func _update_game(dt: float) -> void:
 			o["was_near"] = true
 
 		if o["p"] >= COLLIDE_AT and o["lane"] == player_lane:
-			if invincible:
+			if o["kind"] == "slick" or o["kind"] == "emp":
+				o["resolved"] = true
+				# Slick patches are a non-event under turbo (matching how
+				# invincible bypasses every other hazard), but EMP's entire
+				# purpose is to counter turbo/invincibility, so it has to be
+				# able to land regardless - otherwise the "anti-turbo"
+				# hazard could never actually catch a player using turbo.
+				if o["kind"] == "emp" or not invincible:
+					var effect_pos := Vector2(lane_x(o["lane"], o["p"]), row_y(o["p"]))
+					if o["kind"] == "slick":
+						_trigger_slick_slide(effect_pos, scale_at(o["p"]))
+					else:
+						_trigger_emp(effect_pos, scale_at(o["p"]))
+			elif invincible:
 				_launch_obstacle(o)
 			elif _has_part("phantom_differential") and not phantom_differential_used:
 				o["resolved"] = true
@@ -962,7 +1120,7 @@ func _update_game(dt: float) -> void:
 				popup_combo(callout["text"], Color(1.0, 0.78, 0.05))
 				_play_combo_badge_fx()
 				_audio_call(&"combo_increased", [combo])
-				if not is_turbo:
+				if not is_turbo and emp_t <= 0.0:
 					var charge_gain := ENHANCED_NEAR_MISS_TURBO_GAIN if _has_part("slipstream_coil") else NEAR_MISS_TURBO_GAIN
 					turbo_gauge = minf(TURBO_GAUGE_MAX, turbo_gauge + charge_gain)
 					if turbo_gauge >= TURBO_GAUGE_MAX:
@@ -1158,16 +1316,17 @@ func _draw() -> void:
 		var finish_p: float = 1.0 - remaining / FINISH_REVEAL_RANGE
 		draw_items.append({"p": finish_p, "cb": func(): _draw_finish_tape(finish_p)})
 
-	var px := lane_x(player_lane_visual, 1.0)
+	var visual_lane := player_lane_visual + _wind_sway()
+	var px := lane_x(visual_lane, 1.0)
 	var py := player_row_y()
 	var p_scale := scale_at(1.0) * 1.05
-	var player_rotation: float = _lane_visual_rotation(player_lane_visual, 1.0)
+	var player_rotation: float = _lane_visual_rotation(visual_lane, 1.0)
 	var turbo_now := is_turbo
 	var t_now := elapsed_t
 	draw_items.append({"p": 1.001, "cb": func():
 		if turbo_now:
 			_draw_flame_trail(Vector2(px, py), p_scale, t_now, player_rotation)
-		_draw_angle_sprite_on_road(TEX_PLAYER_ANGLE_SHEET, _angle_frame_for_lane(player_lane_visual), Vector2(px, py), p_scale * HD_VEHICLE_SCALE, 1.0, 0.34)
+		_draw_angle_sprite_on_road(TEX_PLAYER_ANGLE_SHEET, _angle_frame_for_lane(visual_lane), Vector2(px, py), p_scale * HD_VEHICLE_SCALE, 1.0, 0.34)
 	})
 
 	draw_items.sort_custom(func(a, b): return a["p"] < b["p"])
@@ -1197,6 +1356,8 @@ func _draw() -> void:
 		draw_rect(Rect2(Vector2.ZERO, sz), Color(1.0, 0.549, 0.078, 0.08 + pulse * 0.05))
 		draw_texture_rect(vignette_tex, Rect2(Vector2.ZERO, sz), false, Color(1, 1, 1, 0.35 + pulse * 0.25))
 	_draw_rain_overlay(sz)
+	if wind_active:
+		_draw_wind_overlay(sz)
 
 
 func _draw_rain_overlay(size: Vector2) -> void:
@@ -1238,6 +1399,39 @@ func _draw_rain_overlay(size: Vector2) -> void:
 			var x := fmod(fi * 173.3, size.x * 0.86) + size.x * 0.07
 			var y := fmod(fi * 91.7 + elapsed_t * (8.0 + fi), size.y * 0.78) + size.y * 0.06
 			draw_circle(Vector2(x, y), radius, Color(0.82, 0.91, 1.0, 0.10 * intensity), false, 0.8, true)
+
+
+# Horizontal streaks flowing in the push direction, plus a directional arrow
+# that both grow bolder as the gust nears resolution - a visual countdown to
+# "counter now or get shoved," independent of the car's own cosmetic sway.
+func _draw_wind_overlay(size: Vector2) -> void:
+	var progress: float = 1.0 - wind_gust_t / WIND_GUST_DURATION
+	var intensity: float = lerpf(0.25, 1.0, progress)
+	var dir := wind_direction
+	var wind_color := Color(0.75, 0.9, 1.0)
+
+	for i in range(26):
+		var fi := float(i)
+		var depth := 0.15 + fmod(fi * 0.61803398875, 1.0) * 0.85
+		var y_seed := fmod(fi * 0.754877666, 1.0)
+		var speed := lerpf(260.0, 760.0, depth) * dir
+		var length := lerpf(30.0, 90.0, depth)
+		var y := y_seed * size.y * 0.85 + size.y * 0.08
+		var travel_x := fmod(elapsed_t * speed + fi * 137.0, size.x + length * 2.0) - length
+		if dir < 0.0:
+			travel_x = size.x - travel_x
+		var alpha := lerpf(0.04, 0.22, depth) * intensity
+		var end := Vector2(travel_x + length * dir, y)
+		draw_line(Vector2(travel_x, y), end, Color(wind_color, alpha), lerpf(1.0, 2.4, depth), true)
+
+	var arrow_alpha := lerpf(0.3, 0.95, progress)
+	var cx := size.x * 0.5
+	var ay := size.y * 0.10
+	var arrow_w := 46.0
+	var tip := Vector2(cx + dir * arrow_w * 0.5, ay)
+	var tail_a := Vector2(cx - dir * arrow_w * 0.5, ay - 14.0)
+	var tail_b := Vector2(cx - dir * arrow_w * 0.5, ay + 14.0)
+	draw_colored_polygon(PackedVector2Array([tip, tail_a, tail_b]), Color(wind_color, arrow_alpha))
 
 
 func _draw_coin_item(coin: Dictionary) -> void:
@@ -1420,6 +1614,13 @@ func _draw_obstacle(obstacle: Dictionary) -> void:
 		var flatness: float = lerpf(0.58, 0.92, depth) if variant == 0 else lerpf(0.88, 1.0, depth)
 		var shadow: float = 0.0 if launched or variant == 0 else 0.25
 		_draw_sprite_on_road(HAZARD_TEXTURES[variant], pos, visual_scale * HAZARD_DRAW_SCALES[variant], p, rotation, shadow, flatness, tint)
+	elif obstacle["kind"] == "slick":
+		var variant: int = int(obstacle["variant"])
+		var flatness: float = lerpf(0.58, 0.92, depth)
+		_draw_sprite_on_road(SLICK_TEXTURES[variant], pos, visual_scale * SLICK_DRAW_SCALES[variant], p, rotation, 0.0, flatness, tint)
+	elif obstacle["kind"] == "emp":
+		var flatness: float = lerpf(0.65, 0.95, depth)
+		_draw_sprite_on_road(TEX_EMP_ZONE, pos, visual_scale * EMP_DRAW_SCALE, p, rotation, 0.18, flatness, tint)
 	else:
 		var car_flatness: float = lerpf(0.88, 1.0, depth)
 		_draw_angle_sprite_on_road(TRAFFIC_ANGLE_SHEETS[obstacle["variant"]], _angle_frame_for_lane(lane), pos, visual_scale * HD_VEHICLE_SCALE, p, 0.0 if launched else 0.32, car_flatness, rotation if launched else 0.0, tint)

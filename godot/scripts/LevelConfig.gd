@@ -33,6 +33,21 @@ class_name LevelConfig
 @export_range(0.0, 1.0) var fog_density: float = 0.0
 @export var fog_color: Color = Color(0.55, 0.58, 0.66)
 
+@export_group("Slick & EMP hazards")
+# Independent spawn odds, rolled alongside hazard_chance - kept low since
+# each one is a distinct control/economy disruption on top of the normal
+# hazard/traffic mix, not a replacement for it. 0 disables that hazard type.
+@export_range(0.0, 1.0) var slick_chance: float = 0.0
+@export_range(0.0, 1.0) var emp_chance: float = 0.0
+
+@export_group("Wind")
+# Periodic sideways gusts on open/bridge-themed levels - a countered gust
+# (swerving away from the push) or the Stabilizer part prevents the forced
+# lane shift; an uncountered one shoves the player one lane over.
+@export var wind_enabled: bool = false
+@export var wind_gust_interval_min: float = 6.0
+@export var wind_gust_interval_max: float = 10.0
+
 
 func difficulty_at(elapsed: float) -> float:
 	return clampf(elapsed / maxf(obstacle_ramp_seconds, 0.1), 0.0, 1.0)

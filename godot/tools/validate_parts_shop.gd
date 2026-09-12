@@ -14,7 +14,7 @@ func _initialize() -> void:
 	# via isolated repro; normal gameplay never hits this because the engine
 	# warms it up before instantiating the real project's main scene.
 	LevelConfig.new()
-	_expect(PartCatalog.PARTS.size() == 17, "Expected seventeen parts")
+	_expect(PartCatalog.PARTS.size() == 20, "Expected twenty parts")
 	var ids: Array[String] = []
 	for part in PartCatalog.PARTS:
 		_expect(not ids.has(part["id"]), "Duplicate part ID: %s" % part["id"])
@@ -31,11 +31,12 @@ func _initialize() -> void:
 	for part_id in next_offers:
 		_expect(part_id not in offers, "Refresh repeated an already shown item")
 	var almost_all := ids.duplicate()
-	almost_all.resize(16)
+	almost_all.resize(19)
 	_expect(PartCatalog.roll_offers(almost_all, 99).size() == 1, "Owned parts were not excluded")
 	_expect(float(PartCatalog.get_part("turbo_dynamo")["description"].find("35%")) >= 0, "Turbo Dynamo must extend duration by 35%")
 	_expect(float(PartCatalog.get_part("slipstream_coil")["description"].find("25%")) >= 0, "Slipstream Coil must advertise 25% near-miss charge")
 	_expect(float(PartCatalog.get_part("impact_reserve")["description"].find("half")) >= 0, "Impact Reserve must advertise half-charge retention")
+	_expect(float(PartCatalog.get_part("faraday_coil")["description"].find("70%")) >= 0, "Faraday Coil must advertise a 70% EMP disable cut")
 	await _validate_transactions()
 	if failures.is_empty():
 		print("PARTS SHOP VALIDATION PASSED: catalog, unseen offers, economy transactions, five-slot cap, persistence, pricing, and abilities.")
