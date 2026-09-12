@@ -147,8 +147,8 @@ const TEX_EMP_ZONE := preload("res://assets/obstacles/emp-zone-hd.png")
 # swerving away from the push direction at any point during a gust counters
 # it; otherwise it shoves the player one lane over when it ends. The visual
 # sway is purely cosmetic feedback for how close the gust is to landing.
-const WIND_GUST_DURATION := 2.6
-const WIND_SWAY_MAX := 0.34
+const WIND_GUST_DURATION := 1.8
+const WIND_SWAY_MAX := 0.55
 
 enum State { READY, PLAYING, PAUSED, WIN, LOSE }
 
@@ -1401,36 +1401,55 @@ func _draw_rain_overlay(size: Vector2) -> void:
 			draw_circle(Vector2(x, y), radius, Color(0.82, 0.91, 1.0, 0.10 * intensity), false, 0.8, true)
 
 
-# Horizontal streaks flowing in the push direction, plus a directional arrow
-# that both grow bolder as the gust nears resolution - a visual countdown to
-# "counter now or get shoved," independent of the car's own cosmetic sway.
+# Fast horizontal streaks and tumbling debris flowing hard in the push
+# direction, plus a directional arrow - all growing bolder as the gust nears
+# resolution, as a visual countdown to "counter now or get shoved,"
+# independent of the car's own cosmetic sway.
 func _draw_wind_overlay(size: Vector2) -> void:
 	var progress: float = 1.0 - wind_gust_t / WIND_GUST_DURATION
-	var intensity: float = lerpf(0.25, 1.0, progress)
+	var intensity: float = lerpf(0.4, 1.0, progress)
 	var dir := wind_direction
-	var wind_color := Color(0.75, 0.9, 1.0)
+	var wind_color := Color(0.78, 0.92, 1.0)
 
-	for i in range(26):
+	for i in range(40):
 		var fi := float(i)
 		var depth := 0.15 + fmod(fi * 0.61803398875, 1.0) * 0.85
 		var y_seed := fmod(fi * 0.754877666, 1.0)
-		var speed := lerpf(260.0, 760.0, depth) * dir
-		var length := lerpf(30.0, 90.0, depth)
+		var speed := lerpf(480.0, 1300.0, depth) * dir
+		var length := lerpf(50.0, 150.0, depth)
 		var y := y_seed * size.y * 0.85 + size.y * 0.08
 		var travel_x := fmod(elapsed_t * speed + fi * 137.0, size.x + length * 2.0) - length
 		if dir < 0.0:
 			travel_x = size.x - travel_x
-		var alpha := lerpf(0.04, 0.22, depth) * intensity
+		var alpha := lerpf(0.12, 0.55, depth) * intensity
 		var end := Vector2(travel_x + length * dir, y)
-		draw_line(Vector2(travel_x, y), end, Color(wind_color, alpha), lerpf(1.0, 2.4, depth), true)
+		draw_line(Vector2(travel_x, y), end, Color(wind_color, alpha), lerpf(1.8, 4.2, depth), true)
 
-	var arrow_alpha := lerpf(0.3, 0.95, progress)
+	# Tumbling debris (dust/grit flecks) gives the streaks physical weight
+	# instead of reading as pure light rays.
+	var debris_color := Color(0.88, 0.84, 0.74)
+	for i in range(18):
+		var fi := float(i) + 0.5
+		var depth := 0.2 + fmod(fi * 0.4539, 1.0) * 0.8
+		var y_seed := fmod(fi * 0.9182, 1.0)
+		var speed := lerpf(520.0, 1150.0, depth) * dir
+		var y_base := y_seed * size.y * 0.82 + size.y * 0.1
+		var bob := sin(elapsed_t * lerpf(9.0, 14.0, depth) + fi) * lerpf(4.0, 12.0, depth)
+		var travel_x := fmod(elapsed_t * speed + fi * 211.0, size.x + 80.0) - 40.0
+		if dir < 0.0:
+			travel_x = size.x - travel_x
+		var radius := lerpf(1.6, 3.6, depth)
+		var alpha := lerpf(0.25, 0.7, depth) * intensity
+		draw_circle(Vector2(travel_x, y_base + bob), radius, Color(debris_color, alpha), true, -1.0, true)
+
+	var arrow_alpha := lerpf(0.45, 1.0, progress)
+	var arrow_scale := lerpf(1.0, 1.6, progress)
 	var cx := size.x * 0.5
 	var ay := size.y * 0.10
-	var arrow_w := 46.0
+	var arrow_w := 46.0 * arrow_scale
 	var tip := Vector2(cx + dir * arrow_w * 0.5, ay)
-	var tail_a := Vector2(cx - dir * arrow_w * 0.5, ay - 14.0)
-	var tail_b := Vector2(cx - dir * arrow_w * 0.5, ay + 14.0)
+	var tail_a := Vector2(cx - dir * arrow_w * 0.5, ay - 14.0 * arrow_scale)
+	var tail_b := Vector2(cx - dir * arrow_w * 0.5, ay + 14.0 * arrow_scale)
 	draw_colored_polygon(PackedVector2Array([tip, tail_a, tail_b]), Color(wind_color, arrow_alpha))
 
 
