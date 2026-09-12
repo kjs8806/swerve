@@ -1,24 +1,27 @@
 extends RefCounted
 
-# Reorder or replace entries here to change both the displayed praise and its
-# matching voice. Combo values above the final entry reuse the final callout.
+# Combos 1-9 rotate through short driving words in Italian, French, and
+# Korean. Combo 10 and every value above it use the recorded Swerve callout.
+const SWERVE_STREAM := preload("res://assets/audio/combo-voice/callout-10-swerve.wav")
 const CALLOUTS: Array[Dictionary] = [
-	{"text": "Good!", "stream": preload("res://assets/audio/combo-voice/callout-01-good.wav")},
-	{"text": "Great!", "stream": preload("res://assets/audio/combo-voice/callout-02-great.wav")},
-	{"text": "Nice!", "stream": preload("res://assets/audio/combo-voice/callout-03-nice.wav")},
-	{"text": "Wow!", "stream": preload("res://assets/audio/combo-voice/callout-04-wow.wav")},
-	{"text": "Excellent!", "stream": preload("res://assets/audio/combo-voice/callout-05-excellent.wav")},
-	{"text": "Amazing!", "stream": preload("res://assets/audio/combo-voice/callout-06-amazing.wav")},
-	{"text": "Fabulous", "stream": preload("res://assets/audio/combo-voice/callout-07-fabulous.wav")},
-	{"text": "Spectacular!", "stream": preload("res://assets/audio/combo-voice/callout-08-spectacular.wav")},
-	{"text": "Wicked!", "stream": preload("res://assets/audio/combo-voice/callout-09-wicked.wav")},
-	{"text": "Swerve!", "stream": preload("res://assets/audio/combo-voice/callout-10-swerve.wav")},
+	{"text": "Scarto!", "speech": "Scarto", "language": "it"},
+	{"text": "Virage!", "speech": "Virage", "language": "fr"},
+	{"text": "회피!", "speech": "회피", "language": "ko"},
+	{"text": "Scarto!", "speech": "Scarto", "language": "it"},
+	{"text": "Virage!", "speech": "Virage", "language": "fr"},
+	{"text": "회피!", "speech": "회피", "language": "ko"},
+	{"text": "Scarto!", "speech": "Scarto", "language": "it"},
+	{"text": "Virage!", "speech": "Virage", "language": "fr"},
+	{"text": "회피!", "speech": "회피", "language": "ko"},
 ]
 
 
 static func for_combo(combo_value: int) -> Dictionary:
-	var index := clampi(combo_value, 1, CALLOUTS.size()) - 1
-	return CALLOUTS[index]
+	if combo_value >= 10 or combo_value < 1:
+		return {"text": "Swerve!", "stream": SWERVE_STREAM}
+	var callout: Dictionary = CALLOUTS[combo_value - 1].duplicate()
+	callout["stream"] = SWERVE_STREAM
+	return callout
 
 
 static func stream_for_combo(combo_value: int) -> AudioStream:

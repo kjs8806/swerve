@@ -18,6 +18,10 @@ window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/handheld/orientation="landscape"
 
+[audio]
+
+general/text_to_speech=true
+
 [rendering]
 
 renderer/rendering_method="gl_compatibility"

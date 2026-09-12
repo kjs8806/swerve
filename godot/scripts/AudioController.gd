@@ -241,9 +241,17 @@ func coin_collected() -> void:
 
 func combo_increased(combo_value: int = 1) -> void:
 	_play("combo")
-	# Only the newest praise line should be heard when combos increase quickly.
+	# Only the newest callout should be heard when combos increase quickly.
 	combo_voice.stop()
-	combo_voice.stream = ComboCalloutConfig.stream_for_combo(combo_value)
+	DisplayServer.tts_stop()
+	var callout := ComboCalloutConfig.for_combo(combo_value)
+	if combo_value < 10:
+		var voices: PackedStringArray = DisplayServer.tts_get_voices_for_language(callout["language"])
+		if not voices.is_empty():
+			DisplayServer.tts_speak(callout["speech"], voices[0], 68, 1.0, 1.08, combo_value, true)
+			return
+	# The recorded Swerve is both the 10x callout and the universal fallback.
+	combo_voice.stream = callout["stream"] as AudioStream
 	combo_voice.play()
 
 
