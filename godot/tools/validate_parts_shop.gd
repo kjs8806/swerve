@@ -4,6 +4,16 @@ var failures: Array[String] = []
 
 
 func _initialize() -> void:
+	# Godot quirk specific to raw `--script` SceneTree entry points: the first
+	# LevelConfig-scripted resource loaded transitively through a static
+	# function (LevelCatalog.get_level(), reached below via Main.tscn/Race.gd)
+	# can come back reporting its class as plain `Resource` instead of
+	# `LevelConfig`, which then fails every strictly-typed read/assignment of
+	# it. Referencing the class directly first warms up its global
+	# registration so every subsequent load resolves correctly. Confirmed
+	# via isolated repro; normal gameplay never hits this because the engine
+	# warms it up before instantiating the real project's main scene.
+	LevelConfig.new()
 	_expect(PartCatalog.PARTS.size() == 17, "Expected seventeen parts")
 	var ids: Array[String] = []
 	for part in PartCatalog.PARTS:
@@ -56,6 +66,10 @@ func _validate_transactions() -> void:
 	race.active_level_index = 0
 	race.active_level = LevelCatalog.get_level(0)
 	race.distance = race.active_level.finish_distance
+	# _update_game() no-ops entirely unless PLAYING - _ready() leaves the
+	# fresh instance in READY (showing the level select lobby), so without
+	# this the win-condition check below never actually runs.
+	race.state = 1 # Race.State.PLAYING
 	race._update_game(0.0)
 	_expect(race.lobby_level_index == 1, "Winning level 1 did not make level 2 the lobby default")
 	_expect(race.shop_offer_ids != offers_before_win, "Winning a level did not refresh the shop")

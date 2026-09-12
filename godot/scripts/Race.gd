@@ -1175,8 +1175,6 @@ func _draw() -> void:
 		item["cb"].call()
 	_draw_fog()
 
-	_draw_fog()
-
 	for fx in spark_fx:
 		_draw_spark_fx(fx)
 	for fx in coin_loss_fx:
