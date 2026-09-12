@@ -573,9 +573,6 @@ func reset_game(play_ui_tap: bool = false) -> void:
 	shop_refresh_count = 0
 	_save_progress()
 	combo = 0
-	if combo_badge_tween != null and combo_badge_tween.is_valid():
-		combo_badge_tween.kill()
-	combo_panel.visible = false
 	best_combo = 0
 	player_lane = int((LANES - 1) / 2)
 	player_lane_visual = float(player_lane)
@@ -787,32 +784,24 @@ func popup_combo(text: String, color: Color) -> void:
 func _play_combo_badge_fx() -> void:
 	if combo_badge_tween != null and combo_badge_tween.is_valid():
 		combo_badge_tween.kill()
-	combo_panel.visible = true
-	combo_panel.pivot_offset = combo_panel.size * 0.5
-	combo_panel.rotation = 0.0
-	combo_art.position.x = 0.0
-	combo_art.visible = false
-	var milestone: bool = combo % 5 == 0
-	var strength: float = minf(float(combo) / 20.0, 1.0)
-	var tint := Color(0.65 + strength * 0.35, 0.85 + strength * 0.15, 1.0)
-	combo_panel.modulate = Color.WHITE
-	combo_label.add_theme_color_override("font_color", tint)
-	combo_panel.scale = Vector2.ONE * COMBO_BADGE_SCALE * (1.18 if milestone else 1.08)
-	combo_badge_tween = create_tween()
-	combo_badge_tween.tween_property(combo_panel, "scale", Vector2.ONE * COMBO_BADGE_SCALE, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	combo_panel.pivot_offset = combo_panel.size * Vector2(0.82, 0.5)
+	combo_panel.scale = Vector2.ONE * COMBO_BADGE_INTRO_SCALE
+	combo_panel.rotation = -0.045
+	combo_panel.modulate = Color(1.0, 0.82, 0.42, 0.25)
+	combo_art.position.x = 24.0
+	combo_art.modulate = Color(1.35, 1.12, 0.72, 1.0)
+	combo_badge_tween = create_tween().set_parallel(true)
+	combo_badge_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	combo_badge_tween.tween_property(combo_panel, "scale", Vector2.ONE * COMBO_BADGE_PEAK_SCALE, 0.14)
+	combo_badge_tween.tween_property(combo_panel, "rotation", 0.0, 0.14)
+	combo_badge_tween.tween_property(combo_panel, "modulate", Color.WHITE, 0.10)
+	combo_badge_tween.tween_property(combo_art, "position:x", 0.0, 0.16)
+	combo_badge_tween.tween_property(combo_art, "modulate", Color.WHITE, 0.22)
+	combo_badge_tween.chain().set_parallel(false)
+	combo_badge_tween.tween_property(combo_panel, "scale", Vector2.ONE * COMBO_BADGE_SCALE, 0.16).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
-func _break_combo() -> void:
-	if combo <= 0:
-		return
-	combo = 0
-	_audio_call(&"combo_broken")
-	if combo_badge_tween != null and combo_badge_tween.is_valid():
-		combo_badge_tween.kill()
-	combo_badge_tween = create_tween()
-	combo_badge_tween.tween_property(combo_panel, "modulate:a", 0.0, 0.3)
-
-
+# ---------- Input ----------
 func try_swerve(dir: int) -> void:
 	if state != State.PLAYING:
 		return
@@ -1008,7 +997,8 @@ func _activate_timed_turbo() -> void:
 	turbo_gauge = TURBO_GAUGE_MAX
 	is_turbo = true
 	invincible = true
-	popup_combo("TURBO", Color(0.5, 0.9, 1.0))
+	var duration := TURBO_DURATION * (1.35 if _has_part("turbo_dynamo") else 1.0)
+	popup_combo("TURBO! %.1fs" % duration, Color(1.0, 0.478, 0.102))
 	_audio_call(&"turbo_charged")
 	if not was_active:
 		turbo_ring_t = TURBO_RING_DURATION
@@ -1161,7 +1151,7 @@ func _update_game(dt: float) -> void:
 				_lose_coins(requested_coin_loss, impact_pos, scale_at(o["p"]))
 				penalty_t = COLLISION_RECOVER_TIME * (0.6 if _has_part("rallycore_suspension") else 1.0)
 				boost_t = 0.0
-				_break_combo()
+				combo = 0
 				if _has_part("impact_reserve"):
 					turbo_gauge *= 0.5
 				else:
@@ -1177,6 +1167,8 @@ func _update_game(dt: float) -> void:
 				best_combo = maxi(best_combo, combo)
 				near_miss_flash = NEAR_MISS_FLASH_DURATION
 				_spawn_spark(Vector2(lane_x(o["lane"], o["p"]), row_y(o["p"])), scale_at(o["p"]), NEAR_MISS_FX_DURATION, NEAR_MISS_SPARK_COLOR)
+				var callout := ComboCalloutConfig.for_combo(combo)
+				popup_combo(callout["text"], Color(1.0, 0.78, 0.05))
 				_play_combo_badge_fx()
 				_audio_call(&"combo_increased", [combo])
 				if not is_turbo and emp_t <= 0.0:
@@ -1327,9 +1319,8 @@ func _update_hud() -> void:
 	var coin_punch_frac: float = maxf(coin_punch_t, coin_loss_punch_t) / COIN_PUNCH_DURATION
 	coin_label.scale = Vector2.ONE * (1.0 + (COIN_PUNCH_SCALE - 1.0) * coin_punch_frac)
 	coin_label.modulate = Color(1.0, 0.32, 0.22) if coin_loss_punch_t > 0.0 else Color.WHITE
-	combo_panel.visible = combo > 0 or (combo_badge_tween != null and combo_badge_tween.is_running())
-	if combo > 0:
-		combo_label.text = "×%d" % combo
+	combo_panel.visible = combo > 0
+	combo_label.text = "%dx" % maxi(1, combo)
 
 	var pct: float = clampf(distance / active_level.finish_distance, 0.0, 1.0)
 	var track_w: float = progress_track.size.x
