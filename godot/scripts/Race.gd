@@ -206,6 +206,7 @@ var active_level: LevelConfig = LevelCatalog.get_level(0)
 var background_texture: Texture2D
 var highest_unlocked_level: int = 0
 var total_gold: int = 0
+var sound_enabled: bool = true
 var lobby_level_index: int = 0
 var race_gold_banked: bool = false
 var owned_part_ids: Array[String] = []
@@ -238,12 +239,14 @@ var level_select: Control
 @onready var menu_actions: VBoxContainer = $HUD/Root/Overlay/OverlayCard/MenuActions
 @onready var resume_button: Button = $HUD/Root/Overlay/OverlayCard/MenuActions/ResumeButton
 @onready var restart_button: Button = $HUD/Root/Overlay/OverlayCard/MenuActions/RestartButton
+@onready var sound_button: Button = $HUD/Root/Overlay/OverlayCard/MenuActions/SoundButton
 @onready var exit_level_button: Button = $HUD/Root/Overlay/OverlayCard/MenuActions/ExitLevelButton
 
 
 func _ready() -> void:
 	randomize()
 	_load_progress()
+	_apply_sound_setting()
 	background_texture = active_level.background_texture
 	# Audio must never prevent the race scene from starting. Load the optional
 	# controller at runtime so an unavailable decoder/resource degrades to a
@@ -262,7 +265,9 @@ func _ready() -> void:
 	pause_button.pressed.connect(_toggle_pause)
 	resume_button.pressed.connect(_resume_game)
 	restart_button.pressed.connect(func(): reset_game(true))
+	sound_button.pressed.connect(_toggle_sound)
 	exit_level_button.pressed.connect(_show_level_select)
+	_update_sound_button()
 	set_process_unhandled_key_input(true)
 	_show_level_select()
 
@@ -277,6 +282,7 @@ func _load_progress() -> void:
 		shop_seen_offer_ids = _valid_catalog_ids(save.get_value("shop", "seen_offer_ids", PackedStringArray()))
 		shop_refresh_count = maxi(0, int(save.get_value("shop", "refresh_count", 0)))
 		shop_seed = int(save.get_value("shop", "seed", 73421))
+		sound_enabled = bool(save.get_value("settings", "sound_enabled", true))
 	if shop_seen_offer_ids.is_empty() and not shop_offer_ids.is_empty():
 		shop_seen_offer_ids.assign(shop_offer_ids)
 	lobby_level_index = highest_unlocked_level
@@ -294,7 +300,26 @@ func _save_progress() -> void:
 	save.set_value("shop", "seen_offer_ids", PackedStringArray(shop_seen_offer_ids))
 	save.set_value("shop", "refresh_count", shop_refresh_count)
 	save.set_value("shop", "seed", shop_seed)
+	save.set_value("settings", "sound_enabled", sound_enabled)
 	save.save("user://progress.cfg")
+
+
+func _apply_sound_setting() -> void:
+	var master_bus := AudioServer.get_bus_index("Master")
+	if master_bus >= 0:
+		AudioServer.set_bus_mute(master_bus, not sound_enabled)
+
+
+func _update_sound_button() -> void:
+	if sound_button != null:
+		sound_button.text = "SOUND: ON" if sound_enabled else "SOUND: OFF"
+
+
+func _toggle_sound() -> void:
+	sound_enabled = not sound_enabled
+	_apply_sound_setting()
+	_update_sound_button()
+	_save_progress()
 
 
 func _valid_part_ids(value: Variant) -> Array[String]:
@@ -1328,10 +1353,6 @@ func _draw() -> void:
 	var py := player_row_y()
 	var p_scale := scale_at(1.0) * 1.05
 	var player_rotation: float = _lane_visual_rotation(visual_lane, 1.0)
-	if slide_t > 0.0 and not _has_part("grip_tires"):
-		var slide_strength: float = clampf(slide_t / SLICK_SLIDE_DURATION, 0.0, 1.0)
-		px += sin(elapsed_t * 11.0) * get_viewport_rect().size.x * 0.012 * slide_strength
-		player_rotation += sin(elapsed_t * 13.0) * 0.12 * slide_strength
 	var turbo_now := is_turbo
 	var t_now := elapsed_t
 	draw_items.append({"p": 1.001, "cb": func():
