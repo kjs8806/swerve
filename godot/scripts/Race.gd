@@ -138,7 +138,7 @@ const TEX_OIL_SLICK := preload("res://assets/obstacles/oil-slick-hd.png")
 # running, zeroing the gauge, and blocking all charging) for their duration -
 # a harsher, more targeted disruption than a normal hazard's speed penalty.
 const EMP_DURATION := 3.5
-const EMP_DRAW_SCALE := 0.30
+const EMP_DRAW_SCALE := 0.16
 const TEX_EMP_ZONE := preload("res://assets/obstacles/emp-zone-hd.png")
 
 # Wind gusts are a periodic sideways push rather than a lane-based obstacle:
@@ -661,7 +661,22 @@ func current_speed() -> float:
 		mult *= BOOST_MULT
 	if is_turbo:
 		mult *= TURBO_MULT
+	if slide_t > 0.0 and not _has_part("grip_tires"):
+		mult *= _oil_spinout_speed_multiplier()
 	return base_speed() * mult
+
+
+func _oil_spinout_progress() -> float:
+	return clampf(1.0 - slide_t / SLICK_SLIDE_DURATION, 0.0, 1.0)
+
+
+func _oil_spinout_speed_multiplier() -> float:
+	var progress: float = _oil_spinout_progress()
+	if progress < 0.42:
+		return 1.0 - smoothstep(0.0, 0.42, progress)
+	if progress < 0.68:
+		return 0.0
+	return smoothstep(0.68, 1.0, progress)
 
 
 func _has_part(part_id: String) -> bool:
@@ -1353,12 +1368,16 @@ func _draw() -> void:
 	var py := player_row_y()
 	var p_scale := scale_at(1.0) * 1.05
 	var player_rotation: float = _lane_visual_rotation(visual_lane, 1.0)
+	var sprite_rotation: float = 0.0
+	if slide_t > 0.0 and not _has_part("grip_tires"):
+		var spin_progress: float = smoothstep(0.0, 0.58, _oil_spinout_progress())
+		sprite_rotation = TAU * 2.0 * spin_progress
 	var turbo_now := is_turbo
 	var t_now := elapsed_t
 	draw_items.append({"p": 1.001, "cb": func():
 		if turbo_now:
 			_draw_flame_trail(Vector2(px, py), p_scale, t_now, player_rotation)
-		_draw_angle_sprite_on_road(TEX_PLAYER_ANGLE_SHEET, _angle_frame_for_lane(visual_lane), Vector2(px, py), p_scale * HD_VEHICLE_SCALE, 1.0, 0.34)
+		_draw_angle_sprite_on_road(TEX_PLAYER_ANGLE_SHEET, _angle_frame_for_lane(visual_lane), Vector2(px, py), p_scale * HD_VEHICLE_SCALE, 1.0, 0.34, 1.0, sprite_rotation)
 	})
 
 	draw_items.sort_custom(func(a, b): return a["p"] < b["p"])
@@ -1707,18 +1726,26 @@ func _draw_obstacle(obstacle: Dictionary) -> void:
 
 
 func _draw_slick_shimmer(pos: Vector2, visual_scale: float, rotation: float, flatness: float, alpha_scale: float) -> void:
-	var phase: float = fmod(elapsed_t * 1.8, TAU)
-	var radius: float = 122.0 * visual_scale
+	var phase: float = elapsed_t * 2.4
+	var half_width: float = 58.0 * visual_scale
 	draw_set_transform(pos, rotation, Vector2(1.0, flatness))
-	draw_arc(Vector2.ZERO, radius * 0.72, phase, phase + 1.9, 22, Color(0.15, 0.82, 1.0, 0.34 * alpha_scale), maxf(1.0, 3.0 * visual_scale), true)
-	draw_arc(Vector2.ZERO, radius * 0.50, phase + 2.1, phase + 4.0, 20, Color(0.78, 0.3, 1.0, 0.28 * alpha_scale), maxf(1.0, 2.4 * visual_scale), true)
-	draw_arc(Vector2.ZERO, radius * 0.86, phase + 4.0, phase + 5.45, 18, Color(1.0, 0.58, 0.12, 0.24 * alpha_scale), maxf(1.0, 2.2 * visual_scale), true)
+	var colors: Array[Color] = [Color(0.15, 0.82, 1.0, 0.32), Color(0.78, 0.3, 1.0, 0.25), Color(1.0, 0.58, 0.12, 0.22)]
+	for band in range(3):
+		var points: PackedVector2Array = PackedVector2Array()
+		for point in range(11):
+			var ratio: float = float(point) / 10.0
+			var x: float = lerpf(-half_width, half_width, ratio)
+			var y: float = (float(band) - 1.0) * 16.0 * visual_scale + sin(ratio * TAU * 1.5 + phase + float(band)) * 5.0 * visual_scale
+			points.append(Vector2(x, y))
+		var color: Color = colors[band]
+		color.a *= alpha_scale
+		draw_polyline(points, color, maxf(1.0, 2.5 * visual_scale), true)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 func _draw_emp_hazard_energy(pos: Vector2, visual_scale: float, rotation: float, flatness: float, alpha_scale: float) -> void:
 	var pulse: float = 0.5 + 0.5 * sin(elapsed_t * 7.5)
-	var radius: float = 128.0 * visual_scale
+	var radius: float = 62.0 * visual_scale
 	draw_set_transform(pos, rotation, Vector2(1.0, flatness))
 	for ring in range(2):
 		var ring_radius := radius * (0.72 + float(ring) * 0.22 + pulse * 0.06)
