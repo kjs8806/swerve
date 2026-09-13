@@ -54,14 +54,22 @@ const SHAKE_MAGNITUDE := 9.0
 const TURBO_FLASH_DURATION := 0.42
 const TURBO_RING_DURATION := 0.72
 
-# Turbo's backdrop is the HD streak sheet dollying out of the road's vanishing
-# point. Three staggered copies of one squared depth ramp keep a sheet always
-# mid-rush, so the loop never visibly restarts.
+# Turbo's backdrop is the HD streak sheet poured down the road as a single
+# stream: the sheet's convergence point pins to the road's far end (the top of
+# the screen, since horizon_y() is 0) and the streaks run straight down the
+# lanes, never fanning out sideways or back up over the HUD. Three staggered
+# copies of one squared depth ramp keep a pass always mid-rush, so the loop
+# never visibly restarts.
 const SPEED_LINE_ALPHA := 0.85
 const SPEED_LINE_LAYERS := 3
 const SPEED_LINE_CYCLE := 0.5
-const SPEED_LINE_START_ZOOM := 0.22
-const SPEED_LINE_END_ZOOM := 3.2
+# The stream is drawn as horizontal bands down the road. Enough of them that
+# each band's affine texture mapping stays imperceptible against the taper.
+const SPEED_LINE_BANDS := 16
+# Sampling window over the sheet, shrinking as a pass advances - magnifying
+# around the convergence point is what makes the streaks rush at the camera.
+const SPEED_LINE_UV_START := 1.0
+const SPEED_LINE_UV_END := 0.34
 const SPEED_LINE_PULSE_SPEED := 3.0
 
 # Coin pickup feedback: a quick punch on the HUD counter plus a brief
@@ -2043,27 +2051,50 @@ func _draw_turbo_activation_pulse(sz: Vector2, center: Vector2) -> void:
 func _draw_speed_lines(t: float) -> void:
 	var w: float = get_w()
 	var h: float = get_h()
-	var origin := Vector2(w * 0.5, h * 0.18)
 	var ignition_boost: float = 1.0 + clampf(turbo_flash_t / TURBO_FLASH_DURATION, 0.0, 1.0) * 0.85
-	var sheet_size: Vector2 = TEX_TURBO_SPEED_LINES.get_size()
-	# Fit to viewport width so the effect lands the same on any screen.
-	var fit: float = w / sheet_size.x
+	var top_y: float = horizon_y()
+	var road_height: float = maxf(1.0, h - top_y)
+	var widest: float = maxf(1.0, road_half_width_at_y(h))
+	var cx: float = center_x()
 	for layer in range(SPEED_LINE_LAYERS):
 		var phase: float = fposmod(t * SPEED_LINE_CYCLE + float(layer) / float(SPEED_LINE_LAYERS), 1.0)
-		# Squared, so a sheet crawls while it is still distant and then tears
+		# Squared, so a pass crawls while it is still distant and then tears
 		# past the camera - the same acceleration the road itself uses.
 		var depth: float = phase * phase
 		var fade: float = sin(phase * PI) * turbo_visual * ignition_boost * SPEED_LINE_ALPHA
 		if fade <= 0.003:
 			continue
-		var size: Vector2 = sheet_size * fit * lerpf(SPEED_LINE_START_ZOOM, SPEED_LINE_END_ZOOM, depth)
-		# A slow counter-rotation per layer keeps the three passes from ever
-		# lining up into an obvious repeat.
-		var tilt: float = sin(t * 0.5 + float(layer) * 2.1) * 0.05
-		draw_set_transform(origin, tilt, Vector2.ONE)
-		draw_texture_rect(TEX_TURBO_SPEED_LINES, Rect2(-size * 0.5, size), false,
-			Color(1.0, 1.0, 1.0, minf(fade, 1.0)))
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		var window: float = lerpf(SPEED_LINE_UV_START, SPEED_LINE_UV_END, depth)
+		for band in range(SPEED_LINE_BANDS):
+			var s0: float = float(band) / float(SPEED_LINE_BANDS)
+			var s1: float = float(band + 1) / float(SPEED_LINE_BANDS)
+			var y0: float = top_y + road_height * s0
+			var y1: float = top_y + road_height * s1
+			# Each band spans the road exactly, so the stream tapers with the
+			# lanes instead of spilling over the scenery either side.
+			var half0: float = road_half_width_at_y(y0)
+			var half1: float = road_half_width_at_y(y1)
+			# The sheet's convergence point (its centre) pins to the road's far
+			# end, and v only ever runs downward from there - never back up.
+			var v0: float = 0.5 + s0 * 0.5 * window
+			var v1: float = 0.5 + s1 * 0.5 * window
+			var u0: float = half0 / widest * 0.5 * window
+			var u1: float = half1 / widest * 0.5 * window
+			# Ease the stream in under the horizon and out past the player so
+			# neither end cuts off against a hard line.
+			var a0: float = fade * smoothstep(0.0, 0.22, s0) * (1.0 - smoothstep(0.9, 1.0, s0))
+			var a1: float = fade * smoothstep(0.0, 0.22, s1) * (1.0 - smoothstep(0.9, 1.0, s1))
+			draw_polygon(
+				PackedVector2Array([
+					Vector2(cx - half0, y0), Vector2(cx + half0, y0),
+					Vector2(cx + half1, y1), Vector2(cx - half1, y1)]),
+				PackedColorArray([
+					Color(1, 1, 1, minf(a0, 1.0)), Color(1, 1, 1, minf(a0, 1.0)),
+					Color(1, 1, 1, minf(a1, 1.0)), Color(1, 1, 1, minf(a1, 1.0))]),
+				PackedVector2Array([
+					Vector2(0.5 - u0, v0), Vector2(0.5 + u0, v0),
+					Vector2(0.5 + u1, v1), Vector2(0.5 - u1, v1)]),
+				TEX_TURBO_SPEED_LINES)
 
 
 func _draw_turbo_edges(sz: Vector2) -> void:
