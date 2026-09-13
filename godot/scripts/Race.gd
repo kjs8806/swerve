@@ -54,34 +54,18 @@ const SHAKE_MAGNITUDE := 9.0
 const TURBO_FLASH_DURATION := 0.42
 const TURBO_RING_DURATION := 0.72
 
-# Turbo's backdrop is the HD streak sheet poured down the road as a single
-# stream: the sheet's convergence point pins to the road's far end (the top of
-# the screen, since horizon_y() is 0) and the streaks run straight down and
-# out past the road edges, spilling over the scenery instead of stopping at
-# the lanes. Three staggered copies of one squared depth ramp keep a pass
-# always mid-rush, so the loop never visibly restarts.
+# Turbo's backdrop is the HD streak sheet itself, scaled up from small to
+# large while anchored at the road's far end (the top of the screen, since
+# horizon_y() is 0) - a plain zoom of the reference image straight toward the
+# camera, not a road-mapped projection. Half the sheet lands above the screen
+# and is clipped away for free, which is what gives the streaming-downward
+# look without any manual UV cropping. Three staggered copies of one squared
+# depth ramp keep a pass always mid-rush, so the loop never visibly restarts.
 const SPEED_LINE_ALPHA := 0.85
 const SPEED_LINE_LAYERS := 3
 const SPEED_LINE_CYCLE := 0.5
-# The stream is drawn as horizontal bands down the road, each split into a
-# left and right half so its UV mapping can start away from screen center
-# (see SPEED_LINE_GAP_K) instead of one quad straddling it.
-const SPEED_LINE_BANDS := 16
-# How far past the road edges the stream spreads, as a multiple of the road's
-# own half-width - "spilling sideways" rather than staying lane-confined.
-const SPEED_LINE_SPILL := 1.6
-# The source photo has a real gap of no light directly behind its vanishing
-# point (a ray pointed straight at the camera has no visible streak), growing
-# roughly linearly with distance from that point. Sampling always starts this
-# far past dead-center on each side so the stream never re-enters that gap -
-# without this, the middle of the road renders as a hole with light streaming
-# past it on both flanks instead of through it.
-const SPEED_LINE_GAP_K := 0.36
-# Sampling window over the sheet, shrinking as a pass advances - magnifying
-# around the convergence point is what makes the streaks rush at the camera.
-const SPEED_LINE_UV_START := 1.0
-const SPEED_LINE_UV_END := 0.34
-const SPEED_LINE_PULSE_SPEED := 3.0
+const SPEED_LINE_START_SCALE := 0.18
+const SPEED_LINE_END_SCALE := 3.2
 
 # Coin pickup feedback: a quick punch on the HUD counter plus a brief
 # in-world sparkle (see spark_fx below) at the exact pickup point.
@@ -2060,11 +2044,11 @@ func _draw_turbo_activation_pulse(sz: Vector2, center: Vector2) -> void:
 # Fast perspective streaks and broad wind ribbons create a visible wind tunnel
 # while keeping the center of the road readable.
 func _draw_speed_lines(t: float) -> void:
-	var h: float = get_h()
+	var w: float = get_w()
 	var ignition_boost: float = 1.0 + clampf(turbo_flash_t / TURBO_FLASH_DURATION, 0.0, 1.0) * 0.85
-	var top_y: float = horizon_y()
-	var road_height: float = maxf(1.0, h - top_y)
-	var cx: float = center_x()
+	var origin := Vector2(center_x(), horizon_y())
+	var sheet_size: Vector2 = TEX_TURBO_SPEED_LINES.get_size()
+	var fit: float = w / sheet_size.x
 	for layer in range(SPEED_LINE_LAYERS):
 		var phase: float = fposmod(t * SPEED_LINE_CYCLE + float(layer) / float(SPEED_LINE_LAYERS), 1.0)
 		# Squared, so a pass crawls while it is still distant and then tears
@@ -2073,46 +2057,9 @@ func _draw_speed_lines(t: float) -> void:
 		var fade: float = sin(phase * PI) * turbo_visual * ignition_boost * SPEED_LINE_ALPHA
 		if fade <= 0.003:
 			continue
-		var window: float = lerpf(SPEED_LINE_UV_START, SPEED_LINE_UV_END, depth)
-		for band in range(SPEED_LINE_BANDS):
-			var s0: float = float(band) / float(SPEED_LINE_BANDS)
-			var s1: float = float(band + 1) / float(SPEED_LINE_BANDS)
-			var y0: float = top_y + road_height * s0
-			var y1: float = top_y + road_height * s1
-			# Spread past the road's own half-width so the stream spills over
-			# the scenery instead of stopping at the lanes.
-			var half0: float = road_half_width_at_y(y0) * SPEED_LINE_SPILL
-			var half1: float = road_half_width_at_y(y1) * SPEED_LINE_SPILL
-			# The sheet's convergence point (its centre) pins to the road's far
-			# end, and v only ever runs downward from there - never back up.
-			var v0: float = 0.5 + s0 * 0.5 * window
-			var v1: float = 0.5 + s1 * 0.5 * window
-			# How far into the source texture's blind gap this band's depth
-			# reaches, and the outer edge of the window being sampled beyond it.
-			var gap0: float = clampf(SPEED_LINE_GAP_K * (v0 - 0.5), 0.0, 0.45)
-			var gap1: float = clampf(SPEED_LINE_GAP_K * (v1 - 0.5), 0.0, 0.45)
-			var outer0: float = gap0 + window * (1.0 - gap0)
-			var outer1: float = gap1 + window * (1.0 - gap1)
-			# Ease the stream in under the horizon and out past the player so
-			# neither end cuts off against a hard line.
-			var a0: float = fade * smoothstep(0.0, 0.22, s0) * (1.0 - smoothstep(0.9, 1.0, s0))
-			var a1: float = fade * smoothstep(0.0, 0.22, s1) * (1.0 - smoothstep(0.9, 1.0, s1))
-			# One half-quad per side: each starts sampling right at the edge of
-			# the texture's dead centre, so the two meet at screen centre with
-			# real streak content instead of straddling a single quad across
-			# the gap and rendering it as a hole down the middle lane.
-			for side in [-1.0, 1.0]:
-				draw_polygon(
-					PackedVector2Array([
-						Vector2(cx, y0), Vector2(cx + side * half0, y0),
-						Vector2(cx + side * half1, y1), Vector2(cx, y1)]),
-					PackedColorArray([
-						Color(1, 1, 1, minf(a0, 1.0)), Color(1, 1, 1, minf(a0, 1.0) * 0.7),
-						Color(1, 1, 1, minf(a1, 1.0) * 0.7), Color(1, 1, 1, minf(a1, 1.0))]),
-					PackedVector2Array([
-						Vector2(0.5 + side * gap0, v0), Vector2(0.5 + side * outer0, v0),
-						Vector2(0.5 + side * outer1, v1), Vector2(0.5 + side * gap1, v1)]),
-					TEX_TURBO_SPEED_LINES)
+		var size: Vector2 = sheet_size * fit * lerpf(SPEED_LINE_START_SCALE, SPEED_LINE_END_SCALE, depth)
+		draw_texture_rect(TEX_TURBO_SPEED_LINES, Rect2(origin - size * 0.5, size), false,
+			Color(1.0, 1.0, 1.0, minf(fade, 1.0)))
 
 
 func _draw_turbo_edges(sz: Vector2) -> void:

@@ -130,6 +130,10 @@ func _validate_emp(race, dt: float) -> void:
 # A gust telegraphs, then shoves one lane toward the push unless the player
 # swerves into it first - or the Stabilizer cancels the shove outright.
 func _validate_wind(race, dt: float) -> void:
+	# New York (index 5) isn't unlocked_by_default, and _start_level() silently
+	# no-ops past the player's unlock progress - without this, every call
+	# below would leave the race on whatever level a prior test left active.
+	race.highest_unlocked_level = 5
 	race._start_level(5) # New York, wind_enabled
 	_place(race, 2)
 	race.wind_active = true
