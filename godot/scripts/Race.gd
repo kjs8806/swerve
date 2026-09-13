@@ -53,7 +53,15 @@ const SHAKE_DURATION := 0.22
 const SHAKE_MAGNITUDE := 9.0
 const TURBO_FLASH_DURATION := 0.42
 const TURBO_RING_DURATION := 0.72
-const SPEED_LINE_ALPHA := 0.55
+
+# Turbo's backdrop is the HD streak sheet dollying out of the road's vanishing
+# point. Three staggered copies of one squared depth ramp keep a sheet always
+# mid-rush, so the loop never visibly restarts.
+const SPEED_LINE_ALPHA := 0.85
+const SPEED_LINE_LAYERS := 3
+const SPEED_LINE_CYCLE := 0.5
+const SPEED_LINE_START_ZOOM := 0.22
+const SPEED_LINE_END_ZOOM := 3.2
 const SPEED_LINE_PULSE_SPEED := 3.0
 
 # Coin pickup feedback: a quick punch on the HUD counter plus a brief
@@ -2037,36 +2045,25 @@ func _draw_speed_lines(t: float) -> void:
 	var h: float = get_h()
 	var origin := Vector2(w * 0.5, h * 0.18)
 	var ignition_boost: float = 1.0 + clampf(turbo_flash_t / TURBO_FLASH_DURATION, 0.0, 1.0) * 0.85
-	# Wide, curved ribbons supply the continuous rushing-air motion. Their
-	# bright cores move much faster than the scenery so turbo remains obvious.
-	for ribbon in range(14):
-		var ribbon_side: float = -1.0 if ribbon % 2 == 0 else 1.0
-		var ribbon_seed: float = float(ribbon) * 0.754877
-		var ribbon_phase: float = fposmod(t * (1.75 + fposmod(ribbon_seed, 0.55)) + ribbon_seed, 1.0)
-		var ribbon_start_depth: float = ribbon_phase * ribbon_phase
-		var ribbon_length: float = 0.16 + ribbon_start_depth * 0.3
-		var ribbon_target := Vector2(w * (0.5 + ribbon_side * (0.62 + fposmod(ribbon_seed, 0.28))), h * (0.78 + fposmod(ribbon_seed * 1.9, 0.24)))
-		var ribbon_points := PackedVector2Array()
-		for point in range(7):
-			var point_ratio: float = float(point) / 6.0
-			var point_depth: float = minf(1.12, ribbon_start_depth + ribbon_length * point_ratio)
-			var ribbon_point: Vector2 = origin.lerp(ribbon_target, point_depth)
-			ribbon_point.x += ribbon_side * sin(point_ratio * PI) * (14.0 + ribbon_start_depth * 24.0)
-			ribbon_points.append(ribbon_point)
-		var ribbon_fade: float = sin(ribbon_phase * PI) * turbo_visual * ignition_boost
-		draw_polyline(ribbon_points, Color(0.05, 0.55, 1.0, ribbon_fade * 0.13), 13.0, true)
-		draw_polyline(ribbon_points, Color(0.78, 0.96, 1.0, ribbon_fade * 0.54), 2.4, true)
-	for i in range(52):
-		var side: float = -1.0 if i % 2 == 0 else 1.0
-		var seed_value: float = float(i) * 0.618034
-		var phase: float = fposmod(t * (1.65 + fposmod(seed_value, 0.85)) + seed_value, 1.0)
+	var sheet_size: Vector2 = TEX_TURBO_SPEED_LINES.get_size()
+	# Fit to viewport width so the effect lands the same on any screen.
+	var fit: float = w / sheet_size.x
+	for layer in range(SPEED_LINE_LAYERS):
+		var phase: float = fposmod(t * SPEED_LINE_CYCLE + float(layer) / float(SPEED_LINE_LAYERS), 1.0)
+		# Squared, so a sheet crawls while it is still distant and then tears
+		# past the camera - the same acceleration the road itself uses.
 		var depth: float = phase * phase
-		var target := Vector2(w * (0.5 + side * (0.65 + fposmod(seed_value, 0.8))), h * (0.6 + fposmod(seed_value * 2.3, 1.0)))
-		var start: Vector2 = origin.lerp(target, depth)
-		var end: Vector2 = origin.lerp(target, minf(1.15, depth + 0.06 + depth * 0.24))
-		var opacity: float = sin(phase * PI) * turbo_visual * ignition_boost
-		draw_line(start, end, Color(0.1, 0.65, 1.0, opacity * 0.16), 8.5, true)
-		draw_line(start, end, Color(0.82, 0.97, 1.0, opacity * 0.82), 1.5 + depth * 2.2, true)
+		var fade: float = sin(phase * PI) * turbo_visual * ignition_boost * SPEED_LINE_ALPHA
+		if fade <= 0.003:
+			continue
+		var size: Vector2 = sheet_size * fit * lerpf(SPEED_LINE_START_ZOOM, SPEED_LINE_END_ZOOM, depth)
+		# A slow counter-rotation per layer keeps the three passes from ever
+		# lining up into an obvious repeat.
+		var tilt: float = sin(t * 0.5 + float(layer) * 2.1) * 0.05
+		draw_set_transform(origin, tilt, Vector2.ONE)
+		draw_texture_rect(TEX_TURBO_SPEED_LINES, Rect2(-size * 0.5, size), false,
+			Color(1.0, 1.0, 1.0, minf(fade, 1.0)))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 func _draw_turbo_edges(sz: Vector2) -> void:
