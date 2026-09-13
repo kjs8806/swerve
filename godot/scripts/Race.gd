@@ -65,7 +65,11 @@ const SPEED_LINE_ALPHA := 0.85
 const SPEED_LINE_LAYERS := 3
 const SPEED_LINE_CYCLE := 0.5
 const SPEED_LINE_START_SCALE := 0.18
-const SPEED_LINE_END_SCALE := 3.2
+# High enough that the sheet already reaches past the bottom of the screen
+# while its fade envelope (peaking at exactly depth 0.25, see the alpha
+# calculation below) still has it near full brightness, not just at the
+# very end of the cycle when it's already faded to nothing.
+const SPEED_LINE_END_SCALE := 8.0
 
 # Coin pickup feedback: a quick punch on the HUD counter plus a brief
 # in-world sparkle (see spark_fx below) at the exact pickup point.
